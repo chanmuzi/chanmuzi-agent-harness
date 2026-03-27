@@ -434,8 +434,19 @@ echo ""
 
 echo -e "${BOLD}${GREEN}=== Setup Complete ===${NC}"
 echo ""
+STEP=0
 echo "Next steps:"
-echo "  1. Reload shell: source $RC_FILE"
-echo "  2. Create ~/.claude/settings.local.json for machine-specific Claude settings"
-echo "  3. Verify: source $RC_FILE && type claude && type codex"
+if ! command -v claude &>/dev/null && [ "$INSTALL_CLAUDE" = true ]; then
+  STEP=$((STEP + 1))
+  echo "  $STEP. Install Claude Code: npm install -g @anthropic-ai/claude-code"
+fi
+if ! command -v codex &>/dev/null && [ "$INSTALL_CODEX" = true ]; then
+  STEP=$((STEP + 1))
+  echo "  $STEP. Install Codex CLI:   npm install -g @openai/codex"
+  echo "     Then re-run: ./setup.sh --codex  (to install skills)"
+fi
+STEP=$((STEP + 1))
+echo "  $STEP. Reload shell: source ${RC_FILE:-~/.bashrc}"
+STEP=$((STEP + 1))
+echo "  $STEP. Verify: type claude && type codex"
 echo ""
