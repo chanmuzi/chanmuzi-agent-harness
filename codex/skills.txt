@@ -1,0 +1,7 @@
+# Codex skills to auto-install via setup.sh
+# One skill name per line (from openai/skills curated list)
+# Lines starting with # are ignored
+context7
+playwright
+pdf
+jupyter-notebook

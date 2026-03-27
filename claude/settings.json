@@ -1,0 +1,129 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "OMC_SKIP_HOOKS": "keyword-detector"
+  },
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch",
+      "Read(~/.claude/*)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch --list*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr list*)",
+      "Bash(gh pr checks*)",
+      "Bash(gh issue view*)",
+      "Bash(gh issue list*)",
+      "Bash(gh api repos/*)",
+      "Bash(gh api /repos/*)",
+      "Bash(gh api /search/*)",
+      "Bash(gh api /orgs/*)",
+      "Bash(gh api /users/*)",
+      "Bash(cd * && npm run dev*)",
+      "Bash(cd * && npm run build*)",
+      "Bash(cd * && npm run preview*)",
+      "Bash(cd * && npm install*)",
+      "Bash(python3 *)",
+      "mcp__shadcn-ui__*"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/block-no-verify.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/quality-gate.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/stop-sound.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|elicitation_dialog",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ \"$(uname)\" = \"Darwin\" ]; then afplay -v 0.2 /System/Library/Sounds/Morse.aiff; else printf '\\a'; fi",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline.sh",
+    "padding": 0
+  },
+  "enabledPlugins": {
+    "oh-my-claudecode@omc": true,
+    "git-conventions@git-conventions": true,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": false,
+    "frontend-design@claude-plugins-official": false,
+    "playwright@claude-plugins-official": false,
+    "ralph-loop@claude-plugins-official": false,
+    "upstage-design@upstage-design": false,
+    "code-review@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "omc": {
+      "source": {
+        "source": "github",
+        "repo": "Yeachan-Heo/oh-my-claudecode"
+      }
+    },
+    "git-conventions": {
+      "source": {
+        "source": "github",
+        "repo": "chanmuzi/git-conventions"
+      }
+    },
+    "ui-ux-pro-max-skill": {
+      "source": {
+        "source": "github",
+        "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
+      }
+    },
+    "upstage-design": {
+      "source": {
+        "source": "github",
+        "repo": "UpstageAI/upstage-design-plugin"
+      }
+    }
+  },
+  "language": "Korean",
+  "effortLevel": "high",
+  "voiceEnabled": false,
+  "skipDangerousModePermissionPrompt": true
+}
