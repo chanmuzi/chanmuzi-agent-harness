@@ -434,19 +434,28 @@ echo ""
 
 echo -e "${BOLD}${GREEN}=== Setup Complete ===${NC}"
 echo ""
-STEP=0
-echo "Next steps:"
+
+# Show install instructions for missing CLIs (red highlight)
+MISSING_CLI=false
 if ! command -v claude &>/dev/null && [ "$INSTALL_CLAUDE" = true ]; then
-  STEP=$((STEP + 1))
-  echo "  $STEP. Install Claude Code: npm install -g @anthropic-ai/claude-code"
+  echo -e "  ${RED}${BOLD}[ACTION REQUIRED]${NC} Claude Code CLI not installed:"
+  echo -e "    ${BOLD}npm install -g @anthropic-ai/claude-code${NC}"
+  echo ""
+  MISSING_CLI=true
 fi
 if ! command -v codex &>/dev/null && [ "$INSTALL_CODEX" = true ]; then
-  STEP=$((STEP + 1))
-  echo "  $STEP. Install Codex CLI:   npm install -g @openai/codex"
-  echo "     Then re-run: ./setup.sh --codex  (to install skills)"
+  echo -e "  ${RED}${BOLD}[ACTION REQUIRED]${NC} Codex CLI not installed:"
+  echo -e "    ${BOLD}npm install -g @openai/codex${NC}"
+  echo -e "    Then re-run: ${DIM}./setup.sh --codex${NC} (to install skills)"
+  echo ""
+  MISSING_CLI=true
 fi
-STEP=$((STEP + 1))
-echo "  $STEP. Reload shell: source ${RC_FILE:-~/.bashrc}"
-STEP=$((STEP + 1))
-echo "  $STEP. Verify: type claude && type codex"
-echo ""
+
+if [ "$MISSING_CLI" = false ]; then
+  echo -e "  ${DIM}All tools configured. No further action needed.${NC}"
+  echo ""
+fi
+
+# Reload shell to apply changes
+echo -e "${DIM}Reloading shell...${NC}"
+exec "$SHELL" -l
