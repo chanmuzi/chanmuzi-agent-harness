@@ -332,6 +332,13 @@ for dep in jq python3 node tmux; do
     esac
   fi
 done
+
+if command -v dev-browser &>/dev/null; then
+  log_ok "dev-browser: $(dev-browser --version 2>/dev/null || echo 'found')"
+else
+  log_warn "dev-browser missing (recommended for Claude/Codex browser automation)"
+  WARNINGS=$((WARNINGS + 1))
+fi
 echo ""
 
 # ══════════════════════════════════════════

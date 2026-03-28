@@ -28,6 +28,8 @@
       "Bash(cd * && npm run build*)",
       "Bash(cd * && npm run preview*)",
       "Bash(cd * && npm install*)",
+      "Bash(dev-browser *)",
+      "Bash(npx dev-browser *)",
       "Bash(python3 *)",
       "mcp__shadcn-ui__*"
     ]

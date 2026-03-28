@@ -54,6 +54,41 @@ link_shared_skill_if_present() {
   fi
 }
 
+install_dev_browser_cli() {
+  if ! command -v npm >/dev/null 2>&1; then
+    log_warn "npm not found. Skipping dev-browser CLI install."
+    log_info "Install Node.js/npm first, then re-run: ./setup.sh"
+    echo ""
+    return 0
+  fi
+
+  log_section "[dev-browser] Installing CLI..."
+
+  DEV_BROWSER_OUTPUT=$(npm install -g dev-browser 2>&1) && DEV_BROWSER_EXIT=0 || DEV_BROWSER_EXIT=$?
+  if [ $DEV_BROWSER_EXIT -eq 0 ]; then
+    log_ok "dev-browser CLI installed/updated"
+  else
+    echo "$DEV_BROWSER_OUTPUT" | sed 's/^/    /'
+    log_warn "Failed to install dev-browser CLI"
+    echo ""
+    return 0
+  fi
+
+  if command -v dev-browser >/dev/null 2>&1; then
+    DEV_BROWSER_INSTALL_OUTPUT=$(dev-browser install 2>&1) && DEV_BROWSER_INSTALL_EXIT=0 || DEV_BROWSER_INSTALL_EXIT=$?
+    if [ $DEV_BROWSER_INSTALL_EXIT -eq 0 ]; then
+      log_ok "dev-browser runtime installed"
+    else
+      echo "$DEV_BROWSER_INSTALL_OUTPUT" | sed 's/^/    /'
+      log_warn "Failed to install dev-browser runtime"
+    fi
+    log_ok "dev-browser: $(dev-browser --version 2>/dev/null || echo 'installed')"
+  else
+    log_warn "dev-browser command not found after install"
+  fi
+  echo ""
+}
+
 sync_codex_mcp_servers() {
   local file="$1" config_toml="$2"
   [ -f "$file" ] || return 0
@@ -283,10 +318,6 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
         fi
       done <<< "$INSTALLED_PLUGINS"
     fi
-
-    # Restore settings.json (plugin install may toggle enabled flags)
-    git -C "$REPO_DIR" checkout -- claude/settings.json 2>/dev/null && \
-      log_ok "settings.json restored" || true
 
     echo -e "  Plugins: ${GREEN}$INSTALL_COUNT new${NC}, ${DIM}$SKIP_COUNT present${NC}, ${DIM}$REMOVE_COUNT removed${NC}, ${RED}$FAIL_COUNT failed${NC}"
   fi
@@ -590,6 +621,10 @@ if [ "$INSTALL_OMX" = true ]; then
     fi
     echo ""
   fi
+fi
+
+if [ "$INSTALL_CLAUDE" = true ] || [ "$INSTALL_CODEX" = true ]; then
+  install_dev_browser_cli
 fi
 
 # ══════════════════════════════════════════

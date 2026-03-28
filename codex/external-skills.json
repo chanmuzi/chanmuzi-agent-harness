@@ -3,5 +3,10 @@
     "repo": "chanmuzi/git-conventions",
     "ref": "main",
     "paths": ["skills/commit", "skills/pr", "skills/review"]
+  },
+  {
+    "repo": "sawyerhood/dev-browser",
+    "ref": "main",
+    "paths": ["skills/dev-browser"]
   }
 ]
