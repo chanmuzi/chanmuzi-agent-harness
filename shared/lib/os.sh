@@ -48,17 +48,19 @@ play_sound() {
 
   if [ "$OS" = "Darwin" ]; then
     if [ -n "$sound_file" ] && [ -f "$sound_file" ]; then
-      afplay -v "$volume" "$sound_file" >/dev/null 2>&1
+      afplay -v "$volume" "$sound_file" >/dev/null 2>&1 || true
     else
-      afplay -v "$volume" /System/Library/Sounds/Pop.aiff >/dev/null 2>&1
+      afplay -v "$volume" /System/Library/Sounds/Pop.aiff >/dev/null 2>&1 || true
     fi
   elif [ -n "$sound_file" ] && [ -f "$sound_file" ] && command -v paplay &>/dev/null; then
-    paplay "$sound_file" 2>/dev/null
+    paplay "$sound_file" 2>/dev/null || true
   elif [ -n "$sound_file" ] && [ -f "$sound_file" ] && command -v aplay &>/dev/null; then
-    aplay "$sound_file" 2>/dev/null
+    aplay "$sound_file" 2>/dev/null || true
   else
     printf '\a'
   fi
+
+  return 0
 }
 
 # Symlink helper: backup existing file, create symlink
