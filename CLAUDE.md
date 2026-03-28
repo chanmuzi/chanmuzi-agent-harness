@@ -18,3 +18,4 @@ This repo is `chanmuzi-agent-harness` — a unified harness for Claude Code and 
 - Guard Linux-only commands with `[ "$(uname -s)" = "Linux" ]`
 - Codex `config.toml` is patch-only — never overwrite `projects.*`, `mcp_servers.*`, `plugins.*`
 - Claude `settings.json` is fully managed — safe to overwrite via symlink
+- Agent-specific behavior is managed in each source doc: `claude/CLAUDE.md` for Claude, `codex/AGENTS.md` for Codex

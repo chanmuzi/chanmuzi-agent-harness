@@ -196,6 +196,14 @@ check_shared_skill_if_present "context7"
 
 SKILLS_FILE="$REPO_DIR/codex/skills.txt"
 if [ -f "$SKILLS_FILE" ]; then
+  DUPLICATE_SKILLS=$(sed 's/#.*//' "$SKILLS_FILE" | xargs -n1 2>/dev/null | sort | uniq -d)
+  if [ -n "$DUPLICATE_SKILLS" ]; then
+    log_warn "codex/skills.txt has duplicate entries: $(echo "$DUPLICATE_SKILLS" | xargs)"
+    WARNINGS=$((WARNINGS + 1))
+  else
+    log_ok "codex/skills.txt has no duplicate entries"
+  fi
+
   while IFS= read -r skill_name; do
     skill_name="$(echo "$skill_name" | sed 's/#.*//' | xargs)"
     [ -z "$skill_name" ] && continue
@@ -212,6 +220,13 @@ fi
 # External skills check
 EXTERNAL_SKILLS_FILE="$REPO_DIR/codex/external-skills.json"
 if [ -f "$EXTERNAL_SKILLS_FILE" ] && command -v jq &>/dev/null; then
+  if jq -e 'all(.[]; (.repo | type == "string") and ((.ref // "main") | type == "string") and (.paths | type == "array") and (.paths | length > 0) and all(.paths[]; type == "string"))' "$EXTERNAL_SKILLS_FILE" >/dev/null 2>&1; then
+    log_ok "codex/external-skills.json schema"
+  else
+    log_warn "codex/external-skills.json schema mismatch"
+    WARNINGS=$((WARNINGS + 1))
+  fi
+
   EXT_COUNT=$(jq length "$EXTERNAL_SKILLS_FILE")
   for i in $(seq 0 $((EXT_COUNT - 1))); do
     EXT_REPO=$(jq -r ".[$i].repo" "$EXTERNAL_SKILLS_FILE")
@@ -225,6 +240,23 @@ if [ -f "$EXTERNAL_SKILLS_FILE" ] && command -v jq &>/dev/null; then
       fi
     done < <(jq -r ".[$i].paths[]" "$EXTERNAL_SKILLS_FILE")
   done
+fi
+
+PROFILE_TOML="$REPO_DIR/codex/profile.toml"
+if [ -f "$PROFILE_TOML" ]; then
+  if grep -q '^\[profiles\.harness\]' "$PROFILE_TOML"; then
+    log_ok "codex/profile.toml has [profiles.harness]"
+  else
+    log_warn "codex/profile.toml missing [profiles.harness]"
+    WARNINGS=$((WARNINGS + 1))
+  fi
+
+  if grep -q '^project_doc_fallback_filenames' "$PROFILE_TOML"; then
+    log_ok "codex/profile.toml sets project_doc_fallback_filenames"
+  else
+    log_warn "codex/profile.toml missing project_doc_fallback_filenames"
+    WARNINGS=$((WARNINGS + 1))
+  fi
 fi
 echo ""
 

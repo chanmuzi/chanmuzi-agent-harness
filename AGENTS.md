@@ -1,8 +1,16 @@
 # AGENTS.md
 
+## Scope
+
+This file defines repository-level rules for maintaining `chanmuzi-agent-harness`.
+Agent-specific behavior should live in each agent's own source docs:
+
+- Claude: `claude/CLAUDE.md`
+- Codex: `codex/AGENTS.md`
+
 ## Cross-Platform Compatibility
 
-This config targets both macOS (Darwin) and Linux. All shell scripts must work on both.
+This harness targets both macOS (Darwin) and Linux. All shell scripts must work on both.
 
 ### Platform-Specific Commands
 
@@ -18,14 +26,19 @@ This config targets both macOS (Darwin) and Linux. All shell scripts must work o
 - Guard macOS-only commands with `[ "$(uname -s)" = "Darwin" ]`
 - Guard Linux-only commands with `[ "$(uname -s)" = "Linux" ]`
 
-## Plugin Management
+## Repository Ownership
 
-- Claude plugins: declared in `claude/settings.json` (`enabledPlugins` + `extraKnownMarketplaces`)
-- Codex curated skills: listed in `codex/skills.txt` (one name per line)
-- Codex external skill repos: declared in `codex/external-skills.json`
-- Codex plugins: preserved in `config.toml` (setup.sh does not modify)
+- `shared/` contains cross-platform helpers and shared shell utilities
+- `claude/` contains Claude-specific config sources
+- `codex/` contains Codex-specific config sources
+- `setup.sh` installs symlinks, patches Codex config, and installs agent extras
+- `check.sh` verifies symlinks, config patches, and required dependencies
 
-## Config Management
+## Agent Config Management
 
-- Claude: full symlink (settings.json, CLAUDE.md, hooks, commands)
-- Codex: symlink (AGENTS.md, hooks.json, hooks) + config.toml patch (profile block only)
+- Claude plugins are declared in `claude/settings.json` via `enabledPlugins` and `extraKnownMarketplaces`
+- Codex curated skills are listed in `codex/skills.txt`
+- Codex external skill repos are declared in `codex/external-skills.json`
+- Claude config is fully symlink-managed from `claude/`
+- Codex config is split between symlink-managed files in `codex/` and patch-only updates to `~/.codex/config.toml`
+- Do not treat agent-specific source docs as shared project rules unless they are restated here
