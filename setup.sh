@@ -4,6 +4,7 @@ set -e
 # ── Parse arguments ──
 INSTALL_CLAUDE=false
 INSTALL_CODEX=false
+INSTALL_OMX=false
 
 if [ $# -eq 0 ]; then
   INSTALL_CLAUDE=true
@@ -13,11 +14,13 @@ else
     case "$arg" in
       --claude) INSTALL_CLAUDE=true ;;
       --codex)  INSTALL_CODEX=true ;;
+      --install-omx) INSTALL_OMX=true ;;
       --help|-h)
-        echo "Usage: ./setup.sh [--claude] [--codex]"
+        echo "Usage: ./setup.sh [--claude] [--codex] [--install-omx]"
         echo "  No flags: install both"
         echo "  --claude: Claude Code only"
         echo "  --codex:  Codex CLI only"
+        echo "  --install-omx: Install/upgrade oh-my-codex CLI only (no omx setup)"
         exit 0
         ;;
       *) echo "Unknown option: $arg"; exit 1 ;;
@@ -157,6 +160,7 @@ echo -e "Repo:   ${DIM}$REPO_DIR${NC}"
 echo -e "OS:     ${DIM}$OS${NC}"
 echo -e "Claude: ${DIM}$INSTALL_CLAUDE${NC}"
 echo -e "Codex:  ${DIM}$INSTALL_CODEX${NC}"
+echo -e "OMX:    ${DIM}$INSTALL_OMX${NC}"
 echo ""
 
 # ══════════════════════════════════════════
@@ -561,6 +565,34 @@ PYEOF
 fi
 
 # ══════════════════════════════════════════
+# OH-MY-CODEX CLI
+# ══════════════════════════════════════════
+if [ "$INSTALL_OMX" = true ]; then
+  log_section "[oh-my-codex] Installing CLI..."
+
+  if ! command -v npm &>/dev/null; then
+    log_warn "npm not found. Skipping oh-my-codex install."
+    log_info "Install Node.js/npm first, then run: ./setup.sh --install-omx"
+    echo ""
+  else
+    OMX_INSTALL_OUTPUT=$(npm install -g oh-my-codex 2>&1) && OMX_INSTALL_EXIT=0 || OMX_INSTALL_EXIT=$?
+    if [ $OMX_INSTALL_EXIT -eq 0 ]; then
+      log_ok "oh-my-codex CLI installed/updated"
+    else
+      echo "$OMX_INSTALL_OUTPUT" | sed 's/^/    /'
+      log_warn "Failed to install oh-my-codex CLI"
+    fi
+
+    if command -v omx &>/dev/null; then
+      log_ok "omx: $(omx --version 2>/dev/null || echo 'found')"
+    else
+      log_warn "omx command not found after install"
+    fi
+    echo ""
+  fi
+fi
+
+# ══════════════════════════════════════════
 # SHELL FUNCTIONS (.zshrc / .bashrc)
 # ══════════════════════════════════════════
 log_section "[Shell] Configuring rc file..."
@@ -636,13 +668,19 @@ else
 fi
 
 if ! command -v node &>/dev/null; then
-  log_warn "node not installed (required by Claude Code plugins)"
+  log_warn "node not installed (required by Claude Code plugins / oh-my-codex)"
 else
   log_ok "node: $(node --version)"
 fi
 
+if command -v omx &>/dev/null; then
+  log_ok "oh-my-codex: $(omx --version 2>/dev/null || echo 'installed')"
+else
+  log_info "oh-my-codex CLI optional: ./setup.sh --install-omx"
+fi
+
 if ! command -v tmux &>/dev/null; then
-  log_warn "tmux not installed (required by claude-team)"
+  log_warn "tmux not installed (required by claude-team / omx team mode)"
 else
   log_ok "tmux: $(tmux -V)"
 fi
@@ -672,9 +710,29 @@ if ! command -v codex &>/dev/null && [ "$INSTALL_CODEX" = true ]; then
   echo ""
   MISSING_CLI=true
 fi
+if [ "$INSTALL_OMX" = true ] && ! command -v omx &>/dev/null; then
+  echo -e "  ${RED}${BOLD}[ACTION REQUIRED]${NC} oh-my-codex CLI not installed:"
+  echo -e "    ${BOLD}npm install -g oh-my-codex${NC}"
+  echo ""
+  MISSING_CLI=true
+fi
+if ! command -v omx &>/dev/null; then
+  echo -e "  ${YELLOW}${BOLD}[RECOMMENDED]${NC} oh-my-codex CLI is not installed:"
+  echo -e "    ${BOLD}./setup.sh --install-omx${NC}"
+  echo -e "    or ${BOLD}npm install -g oh-my-codex${NC}"
+  echo -e "    ${DIM}Install the CLI globally, then use it only per project with:${NC} ${BOLD}omx setup --scope project${NC}"
+  echo ""
+fi
 
 if [ "$MISSING_CLI" = false ]; then
   echo -e "  ${DIM}All tools configured. No further action needed.${NC}"
+  echo ""
+fi
+
+if command -v omx &>/dev/null; then
+  echo -e "  ${DIM}OMX policy:${NC} keep ${BOLD}~/.codex${NC} managed by this harness."
+  echo -e "  ${DIM}Use OMX only per project:${NC} ${BOLD}cd <project> && omx setup --scope project${NC}"
+  echo -e "  ${DIM}Avoid:${NC} ${BOLD}omx setup --scope user${NC}"
   echo ""
 fi
 

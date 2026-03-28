@@ -66,10 +66,44 @@ chmod +x setup.sh check.sh
 ```bash
 ./setup.sh --claude    # Claude Code만
 ./setup.sh --codex     # Codex CLI만
+./setup.sh --install-omx  # oh-my-codex CLI만 전역 설치
 ./setup.sh             # 둘 다 (기본)
 ```
 
-### 3-1. context7 복구
+### 3-1. oh-my-codex 정책
+
+`oh-my-codex`는 전역 CLI로 설치만 해두는 것은 괜찮습니다.
+하지만 `omx setup`이 실제 설정 파일을 쓰기 시작하면 이 harness가 관리하는
+전역 `~/.codex`와 충돌할 수 있습니다.
+
+이 저장소의 기본 원칙:
+
+- 전역 `~/.codex`는 이 harness가 관리
+- `oh-my-codex`는 필요할 때만 개별 프로젝트에서 사용
+- `omx setup --scope user`는 사용하지 않음
+- `omx setup --scope project`만 사용
+
+전역 설치:
+
+```bash
+./setup.sh --install-omx
+```
+
+프로젝트별 적용:
+
+```bash
+cd /path/to/project
+omx setup --scope project
+```
+
+사전 점검:
+
+```bash
+cd /path/to/project
+omx setup --scope project --dry-run
+```
+
+### 3-2. context7 복구
 
 `context7`를 실제로 사용한다면 새 머신에서 별도로 채워줘야 합니다.
 이 harness는 `~/.agents/skills/context7`를 `~/.codex/skills/context7`에
@@ -107,6 +141,9 @@ scp ~/.agents/skills/context7/SKILL.md \
 ./check.sh
 ```
 
+`check.sh`는 전역 `~/.codex`에 `oh-my-codex` user-scope 설정 흔적이 있으면
+경고를 출력합니다. 이 경우 전역 설정 공존이 아니라 충돌 가능성으로 봐야 합니다.
+
 ## 쉘 명령어
 
 ### Claude Code
@@ -129,6 +166,17 @@ scp ~/.agents/skills/context7/SKILL.md \
 `[projects."<repo path>"]`에 `trust_level = "trusted"`로 등록합니다.
 이 trust 설정은 approval/sandbox 옵션과 별개입니다.
 
+### oh-my-codex
+
+| 명령어 | 설명 |
+|--------|------|
+| `./setup.sh --install-omx` | `oh-my-codex` CLI만 전역 설치/업데이트 |
+| `omx setup --scope project` | 현재 프로젝트에만 OMX 적용 |
+| `omx setup --scope project --dry-run` | 실제 쓰기 전 프로젝트 적용 범위 확인 |
+
+`oh-my-codex`는 Codex 전용 워크플로우 레이어입니다.
+Claude Code 설정에는 적용되지 않습니다.
+
 ## 업데이트
 
 ```bash
@@ -147,3 +195,45 @@ git pull
 Codex의 `config.toml`에서 harness가 관리하는 영역은 `[profiles.harness]` 블록과
 현재 harness 저장소의 `projects."<repo path>".trust_level` 엔트리뿐이며,
 다른 `projects.*`, `mcp_servers.*`, `plugins.*`는 건드리지 않습니다.
+
+`oh-my-codex`를 함께 사용할 때도 이 원칙은 유지합니다.
+따라서 OMX는 전역 `user` scope가 아니라 프로젝트 로컬 `project` scope로만 사용하는 것을 권장합니다.
+
+## 실제 적용 테스트
+
+전역 CLI 설치 확인:
+
+```bash
+./setup.sh --install-omx
+omx --version
+./check.sh
+```
+
+기대 결과:
+
+- `omx --version`이 출력됩니다.
+- `./check.sh`에서 전역 `~/.codex` 관련 오류가 없어야 합니다.
+- 전역 OMX 흔적 경고가 없어야 합니다.
+
+프로젝트 단위 안전 테스트:
+
+```bash
+cd /path/to/scratch-project
+omx setup --scope project --dry-run
+omx setup --scope project
+```
+
+확인 포인트:
+
+- 프로젝트 루트에 `./.codex/`가 생깁니다.
+- 프로젝트 루트에 `./.omx/`가 생깁니다.
+- 전역 `~/.codex/AGENTS.md`와 `~/.codex/hooks.json`은 그대로 유지됩니다.
+- 이 harness 저장소에서 `./check.sh`를 다시 돌렸을 때 전역 설정 drift가 없어야 합니다.
+
+피해야 할 테스트:
+
+```bash
+omx setup --scope user
+```
+
+이 명령은 전역 `~/.codex`를 건드리므로 이 harness와 충돌할 수 있습니다.
