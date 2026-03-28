@@ -21,7 +21,8 @@ This config targets both macOS (Darwin) and Linux. All shell scripts must work o
 ## Plugin Management
 
 - Claude plugins: declared in `claude/settings.json` (`enabledPlugins` + `extraKnownMarketplaces`)
-- Codex skills: listed in `codex/skills.txt` (one name per line)
+- Codex curated skills: listed in `codex/skills.txt` (one name per line)
+- Codex external skill repos: declared in `codex/external-skills.json`
 - Codex plugins: preserved in `config.toml` (setup.sh does not modify)
 
 ## Config Management
