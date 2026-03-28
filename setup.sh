@@ -205,8 +205,6 @@ if [ "$INSTALL_CODEX" = true ]; then
   if [ ! -f "$CONFIG_TOML" ]; then
     log_info "config.toml not found — creating minimal config"
     cat > "$CONFIG_TOML" <<'TOML'
-model = "gpt-5.4"
-model_reasoning_effort = "high"
 personality = "pragmatic"
 
 [features]
@@ -306,10 +304,10 @@ PYEOF
 
   # ── Skills ──
   if command -v codex &>/dev/null; then
+    SKILL_INSTALLER="$CODEX_DIR/skills/.system/skill-installer/scripts/install-skill-from-github.py"
     SKILLS_FILE="$REPO_DIR/codex/skills.txt"
     if [ -f "$SKILLS_FILE" ]; then
       log_section "  Skills..."
-      SKILL_INSTALLER="$CODEX_DIR/skills/.system/skill-installer/scripts/install-skill-from-github.py"
 
       if [ -f "$SKILL_INSTALLER" ]; then
         while IFS= read -r skill_name; do
@@ -337,6 +335,7 @@ PYEOF
       fi
       echo ""
     fi
+
   fi
 fi
 

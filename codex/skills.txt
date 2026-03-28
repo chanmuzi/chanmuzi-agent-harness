@@ -1,7 +1,7 @@
 # Codex skills to auto-install via setup.sh
 # One skill name per line (from openai/skills curated list)
 # Lines starting with # are ignored
-context7
+# Note: context7 is installed separately via ~/.agents/skills symlink
 playwright
 pdf
 jupyter-notebook

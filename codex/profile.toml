@@ -3,8 +3,6 @@
 # Do NOT put machine-specific settings here (projects, MCP, plugins)
 
 [profiles.harness]
-model = "gpt-5.4"
-model_reasoning_effort = "xhigh"
 personality = "pragmatic"
 notify = ["bash", "-lc", "~/.codex/hooks/codex-turn-complete-sound.sh"]
 project_doc_fallback_filenames = ["CLAUDE.md"]
