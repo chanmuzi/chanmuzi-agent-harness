@@ -2,8 +2,6 @@
 
 This repo is `chanmuzi-agent-harness` — a unified harness for Claude Code and Codex CLI configuration.
 
-Read `AGENTS.md` for shared project facts and keep overlapping project-level guidance aligned between the two files.
-
 ## Structure
 
 - `shared/` — Cross-platform helpers, shell functions, common hooks

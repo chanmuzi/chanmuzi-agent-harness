@@ -8,8 +8,6 @@ Agent-specific behavior should live in each agent's own source docs:
 - Claude: `claude/CLAUDE.md`
 - Codex: `codex/AGENTS.md`
 
-Keep shared project facts in this file and reflect corresponding project-level changes in `CLAUDE.md` within the same commit.
-
 ## Cross-Platform Compatibility
 
 This harness targets both macOS (Darwin) and Linux. All shell scripts must work on both.
