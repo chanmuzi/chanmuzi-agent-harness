@@ -10,6 +10,7 @@ REPO_DIR="$(resolve_path "$SCRIPT_DIR")"
 REPO_DIR="${REPO_DIR%/.}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
+AGENTS_DIR="$HOME/.agents"
 
 ERRORS=0
 WARNINGS=0
@@ -35,6 +36,16 @@ check_symlink() {
   else
     log_error "$label missing"
     ERRORS=$((ERRORS + 1))
+  fi
+}
+
+check_shared_skill_if_present() {
+  local skill_name="$1"
+  local src="$AGENTS_DIR/skills/$skill_name"
+  local dst="$CODEX_DIR/skills/$skill_name"
+
+  if [ -d "$src" ]; then
+    check_symlink "$dst" "$src" "skill: $skill_name"
   fi
 }
 
@@ -145,17 +156,50 @@ if [ -f "$CONFIG_TOML" ]; then
     log_warn "project_doc_fallback_filenames missing"
     WARNINGS=$((WARNINGS + 1))
   fi
+
+  REPO_TRUSTED=$(python3 - "$CONFIG_TOML" "$REPO_DIR" <<'PYEOF'
+import json
+import sys
+
+path, repo_dir = sys.argv[1], sys.argv[2]
+target_header = f'[projects.{json.dumps(repo_dir)}]'
+lines = open(path).read().splitlines()
+
+for i, line in enumerate(lines):
+    if line.strip() != target_header:
+        continue
+    for j in range(i + 1, len(lines)):
+        stripped = lines[j].strip()
+        if stripped.startswith('['):
+            break
+        if stripped.startswith('trust_level'):
+            print('yes' if '"trusted"' in stripped or "'trusted'" in stripped else 'no')
+            raise SystemExit
+    print('no')
+    raise SystemExit
+print('no')
+PYEOF
+)
+  if [ "$REPO_TRUSTED" = "yes" ]; then
+    log_ok "repo trust set for $REPO_DIR"
+  else
+    log_warn "repo trust missing for $REPO_DIR"
+    WARNINGS=$((WARNINGS + 1))
+  fi
 else
   log_warn "config.toml not found"
   WARNINGS=$((WARNINGS + 1))
 fi
 
 # Skills check
+check_shared_skill_if_present "context7"
+
 SKILLS_FILE="$REPO_DIR/codex/skills.txt"
 if [ -f "$SKILLS_FILE" ]; then
   while IFS= read -r skill_name; do
     skill_name="$(echo "$skill_name" | sed 's/#.*//' | xargs)"
     [ -z "$skill_name" ] && continue
+    [ "$skill_name" = "context7" ] && continue
     if [ -d "$CODEX_DIR/skills/$skill_name" ]; then
       log_ok "skill: $skill_name"
     else

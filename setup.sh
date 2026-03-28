@@ -34,6 +34,20 @@ REPO_DIR="$(resolve_path "$SCRIPT_DIR")"
 REPO_DIR="${REPO_DIR%/.}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
+AGENTS_DIR="$HOME/.agents"
+
+link_shared_skill_if_present() {
+  local skill_name="$1"
+  local src="$AGENTS_DIR/skills/$skill_name"
+  local dst="$CODEX_DIR/skills/$skill_name"
+
+  if [ -d "$src" ]; then
+    link_file "$src" "$dst"
+  else
+    log_warn "$skill_name not found in $src"
+    log_info "Install $skill_name into ~/.agents/skills first, then re-run setup."
+  fi
+}
 
 echo -e "${BOLD}=== Agent Harness Setup ===${NC}"
 echo -e "Repo:   ${DIM}$REPO_DIR${NC}"
@@ -184,7 +198,7 @@ if [ "$INSTALL_CODEX" = true ]; then
     echo ""
   fi
 
-  mkdir -p "$CODEX_DIR/hooks"
+  mkdir -p "$CODEX_DIR/hooks" "$CODEX_DIR/skills"
 
   # ── Symlinks ──
   log_section "  Symlinks..."
@@ -323,12 +337,80 @@ open(path, 'w').writelines(lines)
 PYEOF
     log_ok "added project_doc_fallback_filenames at global level"
   fi
+
+  # 6. Trust this harness repo to avoid repeated workspace trust prompts
+  TRUST_STATUS=$(python3 - "$CONFIG_TOML" "$REPO_DIR" <<'PYEOF'
+import json
+import sys
+
+path, repo_dir = sys.argv[1], sys.argv[2]
+target_header = f'[projects.{json.dumps(repo_dir)}]'
+lines = open(path).read().splitlines(True)
+
+section_start = None
+section_end = None
+for i, line in enumerate(lines):
+    if line.strip() == target_header:
+        section_start = i
+        section_end = len(lines)
+        for j in range(i + 1, len(lines)):
+            if lines[j].strip().startswith('['):
+                section_end = j
+                break
+        break
+
+if section_start is None:
+    if lines and lines[-1].strip():
+        lines.append('\n')
+    lines.append(f'{target_header}\n')
+    lines.append('trust_level = "trusted"\n')
+    open(path, 'w').writelines(lines)
+    print('added')
+    raise SystemExit
+
+trust_idx = None
+trust_value = None
+for idx in range(section_start + 1, section_end):
+    stripped = lines[idx].strip()
+    if stripped.startswith('trust_level'):
+        trust_idx = idx
+        _, _, value = stripped.partition('=')
+        trust_value = value.strip().strip('"').strip("'")
+        break
+
+if trust_value == 'trusted':
+    print('already')
+elif trust_idx is not None:
+    lines[trust_idx] = 'trust_level = "trusted"\n'
+    open(path, 'w').writelines(lines)
+    print('updated')
+else:
+    insert_at = section_start + 1
+    while insert_at < section_end and lines[insert_at].strip() == '':
+        insert_at += 1
+    lines.insert(insert_at, 'trust_level = "trusted"\n')
+    open(path, 'w').writelines(lines)
+    print('inserted')
+PYEOF
+)
+  case "$TRUST_STATUS" in
+    already)  log_skip "repo trust already set for $REPO_DIR" ;;
+    added)    log_ok "added repo trust for $REPO_DIR" ;;
+    updated)  log_ok "updated repo trust for $REPO_DIR" ;;
+    inserted) log_ok "inserted repo trust for $REPO_DIR" ;;
+    *)        log_warn "Unable to confirm repo trust status for $REPO_DIR" ;;
+  esac
   echo ""
 
   # ── Skills ──
   if command -v codex &>/dev/null; then
     SKILL_INSTALLER="$CODEX_DIR/skills/.system/skill-installer/scripts/install-skill-from-github.py"
     SKILLS_FILE="$REPO_DIR/codex/skills.txt"
+
+    log_section "  Shared Skills..."
+    link_shared_skill_if_present "context7"
+    echo ""
+
     if [ -f "$SKILLS_FILE" ]; then
       log_section "  Skills..."
 
@@ -337,6 +419,15 @@ PYEOF
           # Skip comments and empty lines
           skill_name="$(echo "$skill_name" | sed 's/#.*//' | xargs)"
           [ -z "$skill_name" ] && continue
+
+          if [ "$skill_name" = "context7" ]; then
+            if [ -L "$CODEX_DIR/skills/context7" ] || [ -d "$CODEX_DIR/skills/context7" ]; then
+              log_ok "context7 (managed via ~/.agents/skills)"
+            else
+              log_warn "context7 missing (expected symlink from ~/.agents/skills)"
+            fi
+            continue
+          fi
 
           if [ -d "$CODEX_DIR/skills/$skill_name" ]; then
             log_ok "$skill_name (already installed)"
@@ -421,6 +512,8 @@ export CHANMUZI_AGENT_HARNESS_HOME=\"$REPO_DIR\"
 $NEW_MARKER_END"
 
 if [ -n "$RC_FILE" ]; then
+  touch "$RC_FILE"
+
   # Remove old claude-config block
   if grep -qF "$OLD_MARKER_BEGIN" "$RC_FILE" 2>/dev/null; then
     sed_inplace "/$OLD_MARKER_BEGIN/,/$OLD_MARKER_END/d" "$RC_FILE"
