@@ -78,9 +78,8 @@ chmod +x setup.sh check.sh
 
 | 명령어 | 설명 |
 |--------|------|
-| `codex` | 승인 없이 + 샌드박스 (`-a never -s workspace-write`) |
+| `codex` | 승인/샌드박스 바이패스 (hooks가 안전장치) |
 | `codex-safe` | 승인 있음 + 샌드박스 (`-a on-request -s workspace-write`) |
-| `codex-y` | 완전 무제한 (`--dangerously-bypass-approvals-and-sandbox`) |
 
 ## 업데이트
 

@@ -79,17 +79,12 @@ claude-team-safe() {
 
 # ── Codex CLI ──
 
-# Default: no approval prompts + workspace-write sandbox (safe, no popups)
+# Default: bypass all approvals and sandbox (hooks provide safety guardrails)
 codex() {
-  command codex -p harness -a never -s workspace-write "$@"
+  command codex -p harness --dangerously-bypass-approvals-and-sandbox "$@"
 }
 
-# Safe: model asks for approval when needed
+# Safe: model asks for approval + workspace-write sandbox
 codex-safe() {
   command codex -p harness -a on-request -s workspace-write "$@"
-}
-
-# YOLO: bypass all approvals and sandbox (use with caution)
-codex-y() {
-  command codex -p harness --dangerously-bypass-approvals-and-sandbox "$@"
 }
