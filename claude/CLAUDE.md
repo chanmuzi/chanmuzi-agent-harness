@@ -34,6 +34,6 @@ Before performing significant actions:
 
 ## Project-Level Instructions
 For project-specific coding style, testing rules, and agent orchestration:
-- Use `AGENTS.md` at the project root (see templates/ in this repo for examples)
+- Use project-level `CLAUDE.md` at the project root for project-specific rules
 - Project-level CLAUDE.md overrides global settings where they conflict
 

@@ -156,27 +156,6 @@ if [ -f "$CONFIG_TOML" ]; then
     WARNINGS=$((WARNINGS + 1))
   fi
 
-  GLOBAL_FALLBACK_OK=$(python3 - "$CONFIG_TOML" <<'PYEOF'
-import sys
-target = 'project_doc_fallback_filenames = ["AGENTS.md", "CLAUDE.md"]'
-for line in open(sys.argv[1]):
-    stripped = line.strip()
-    if stripped.startswith('['):
-        print('no')
-        raise SystemExit
-    if stripped.startswith('project_doc_fallback_filenames'):
-        print('yes' if stripped == target else 'no')
-        raise SystemExit
-print('no')
-PYEOF
-)
-  if [ "$GLOBAL_FALLBACK_OK" = "yes" ]; then
-    log_ok "project_doc_fallback_filenames set"
-  else
-    log_warn "project_doc_fallback_filenames missing or outdated"
-    WARNINGS=$((WARNINGS + 1))
-  fi
-
   REPO_TRUSTED=$(python3 - "$CONFIG_TOML" "$REPO_DIR" <<'PYEOF'
 import json
 import sys
@@ -271,12 +250,6 @@ if [ -f "$PROFILE_TOML" ]; then
     WARNINGS=$((WARNINGS + 1))
   fi
 
-  if grep -Fq 'project_doc_fallback_filenames = ["AGENTS.md", "CLAUDE.md"]' "$PROFILE_TOML"; then
-    log_ok "codex/profile.toml sets project_doc_fallback_filenames"
-  else
-    log_warn "codex/profile.toml missing or outdated project_doc_fallback_filenames"
-    WARNINGS=$((WARNINGS + 1))
-  fi
 fi
 
 if [ -f "$CODEX_MCP_FILE" ] && command -v jq &>/dev/null; then

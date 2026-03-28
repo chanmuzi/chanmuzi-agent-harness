@@ -389,56 +389,7 @@ PYEOF
     log_ok "merged [profiles.harness] from profile.toml"
   fi
 
-  # 5. Set project_doc_fallback_filenames at global level (before first [section])
-  FALLBACK_STATUS=$(python3 - "$CONFIG_TOML" <<'PYEOF'
-import sys
-path = sys.argv[1]
-target = 'project_doc_fallback_filenames = ["AGENTS.md", "CLAUDE.md"]\n'
-lines = open(path).readlines()
-
-global_lines = []
-rest_lines = []
-in_section = False
-for line in lines:
-    if not in_section and line.strip().startswith('['):
-        in_section = True
-    if in_section:
-        rest_lines.append(line)
-    else:
-        global_lines.append(line)
-
-had_target = False
-had_other = False
-filtered_globals = []
-for line in global_lines:
-    stripped = line.strip()
-    if stripped.startswith('project_doc_fallback_filenames'):
-        if stripped == target.strip():
-            had_target = True
-        else:
-            had_other = True
-        continue
-    filtered_globals.append(line)
-
-insert_at = 0
-for i, line in enumerate(filtered_globals):
-    if line.strip() and not line.strip().startswith('#'):
-        insert_at = i + 1
-filtered_globals.insert(insert_at, target)
-
-status = 'already' if had_target and not had_other else ('updated' if had_target or had_other else 'added')
-open(path, 'w').writelines(filtered_globals + rest_lines)
-print(status)
-PYEOF
-)
-  case "$FALLBACK_STATUS" in
-    already) log_skip "project_doc_fallback_filenames already at global level" ;;
-    updated) log_ok "updated project_doc_fallback_filenames at global level" ;;
-    added)   log_ok "added project_doc_fallback_filenames at global level" ;;
-    *)       log_warn "Unable to confirm project_doc_fallback_filenames status" ;;
-  esac
-
-  # 6. Trust this harness repo to avoid repeated workspace trust prompts
+  # 5. Trust this harness repo to avoid repeated workspace trust prompts
   TRUST_STATUS=$(python3 - "$CONFIG_TOML" "$REPO_DIR" <<'PYEOF'
 import json
 import sys
