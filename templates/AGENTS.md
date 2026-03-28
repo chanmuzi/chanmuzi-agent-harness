@@ -1,6 +1,12 @@
 # AGENTS.md
 <!-- Copy this file to your project root and customize per project -->
 
+## Shared Project Context
+- This file is the project-level source of truth for shared constraints used by both Codex and Claude.
+- Keep cross-agent facts here: repository layout, environment caveats, required commands, and non-negotiable rules.
+- Put Claude-specific behavior in `CLAUDE.md`, but keep shared project facts aligned between the two files.
+- If one file changes shared project assumptions, update the other file in the same commit.
+
 ## Project Info
 - **Language**: <!-- e.g., Python 3.12, TypeScript 5.x -->
 - **Framework**: <!-- e.g., Next.js 15, FastAPI, Django -->
@@ -43,6 +49,10 @@ npm run test
 
 ## Agent Orchestration
 
+### Claude Alignment
+- `CLAUDE.md` should reference this file for shared project facts rather than redefining them differently.
+- Keep project-specific workflow notes consistent across `AGENTS.md` and `CLAUDE.md`.
+
 ### When to use agents
 - **code-reviewer**: After completing a feature or significant refactor
 - **security-reviewer**: Before committing changes that touch auth, API keys, or user input handling
@@ -63,3 +73,8 @@ Before committing, verify:
 - [ ] User input is validated at system boundaries
 - [ ] No `eval()`, `dangerouslySetInnerHTML`, or raw SQL without parameterization
 - [ ] Sensitive files (.env, *.pem, *.key) are in .gitignore
+
+## Environment Notes
+- Document path-sensitive commands explicitly when local and server paths differ.
+- Prefer environment variables or wrapper scripts over hardcoded absolute paths.
+- If the project depends on MCP servers, record which parts are repo-managed and which parts each machine must configure manually.
