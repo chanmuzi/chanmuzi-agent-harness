@@ -164,6 +164,24 @@ if [ -f "$SKILLS_FILE" ]; then
     fi
   done < "$SKILLS_FILE"
 fi
+
+# External skills check
+EXTERNAL_SKILLS_FILE="$REPO_DIR/codex/external-skills.json"
+if [ -f "$EXTERNAL_SKILLS_FILE" ] && command -v jq &>/dev/null; then
+  EXT_COUNT=$(jq length "$EXTERNAL_SKILLS_FILE")
+  for i in $(seq 0 $((EXT_COUNT - 1))); do
+    EXT_REPO=$(jq -r ".[$i].repo" "$EXTERNAL_SKILLS_FILE")
+    while IFS= read -r skill_path; do
+      skill_name="$(basename "$skill_path")"
+      if [ -d "$CODEX_DIR/skills/$skill_name" ]; then
+        log_ok "skill: $skill_name (from $EXT_REPO)"
+      else
+        log_warn "skill: $skill_name not installed (from $EXT_REPO)"
+        WARNINGS=$((WARNINGS + 1))
+      fi
+    done < <(jq -r ".[$i].paths[]" "$EXTERNAL_SKILLS_FILE")
+  done
+fi
 echo ""
 
 # ══════════════════════════════════════════

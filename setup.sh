@@ -359,6 +359,40 @@ PYEOF
       echo ""
     fi
 
+    # ── External Skills (from external-skills.json) ──
+    EXTERNAL_SKILLS_FILE="$REPO_DIR/codex/external-skills.json"
+    if [ -f "$EXTERNAL_SKILLS_FILE" ] && [ -f "$SKILL_INSTALLER" ]; then
+      log_section "  External Skills..."
+
+      EXT_COUNT=$(jq length "$EXTERNAL_SKILLS_FILE")
+      for i in $(seq 0 $((EXT_COUNT - 1))); do
+        EXT_REPO=$(jq -r ".[$i].repo" "$EXTERNAL_SKILLS_FILE")
+        EXT_REF=$(jq -r ".[$i].ref // \"main\"" "$EXTERNAL_SKILLS_FILE")
+
+        while IFS= read -r skill_path; do
+          skill_name="$(basename "$skill_path")"
+          if [ -d "$CODEX_DIR/skills/$skill_name" ]; then
+            log_ok "$skill_name (already installed from $EXT_REPO)"
+          else
+            log_action "installing $skill_name from $EXT_REPO ..."
+            SKILL_OUTPUT=$(python3 "$SKILL_INSTALLER" \
+              --repo "$EXT_REPO" \
+              --ref "$EXT_REF" \
+              --path "$skill_path" \
+              --name "$skill_name" 2>&1) && SKILL_EXIT=0 || SKILL_EXIT=$?
+            if [ $SKILL_EXIT -eq 0 ]; then
+              log_ok "installed $skill_name"
+            else
+              echo "$SKILL_OUTPUT" | sed 's/^/    /'
+              log_warn "Failed to install $skill_name from $EXT_REPO"
+            fi
+          fi
+        done < <(jq -r ".[$i].paths[]" "$EXTERNAL_SKILLS_FILE")
+      done
+      echo ""
+    elif [ -f "$EXTERNAL_SKILLS_FILE" ] && [ ! -f "$SKILL_INSTALLER" ]; then
+      log_warn "External skills declared but skill installer not found. Run 'codex' once first."
+    fi
   fi
 fi
 
