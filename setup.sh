@@ -35,6 +35,7 @@ REPO_DIR="${REPO_DIR%/.}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
 AGENTS_DIR="$HOME/.agents"
+CODEX_MCP_FILE="$REPO_DIR/codex/mcp-servers.json"
 
 link_shared_skill_if_present() {
   local skill_name="$1"
@@ -47,6 +48,88 @@ link_shared_skill_if_present() {
     log_warn "$skill_name not found in $src"
     log_info "Install $skill_name into ~/.agents/skills first, then re-run setup."
   fi
+}
+
+codex_mcp_field() {
+  local name="$1" field="$2"
+  codex mcp get "$name" 2>/dev/null | awk -F': ' -v key="$field" '$1 ~ "^  " key "$" {print $2}'
+}
+
+sync_codex_mcp_servers() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+
+  if ! command -v jq >/dev/null 2>&1; then
+    log_warn "jq missing — skipping Codex MCP sync"
+    return 0
+  fi
+
+  log_section "  MCP Servers..."
+
+  if ! jq -e 'all(.[]; (.name | type == "string") and (.transport == "streamable_http") and (.url | type == "string") and (.auth | type == "string"))' "$file" >/dev/null 2>&1; then
+    log_warn "codex/mcp-servers.json schema mismatch — skipping MCP sync"
+    echo ""
+    return 0
+  fi
+
+  while IFS= read -r entry; do
+    [ -z "$entry" ] && continue
+
+    local name url auth bearer_env
+    name="$(echo "$entry" | jq -r '.name')"
+    url="$(echo "$entry" | jq -r '.url')"
+    auth="$(echo "$entry" | jq -r '.auth')"
+    bearer_env="$(echo "$entry" | jq -r '.bearer_token_env_var // empty')"
+
+    local add_args=()
+    add_args+=("$name" --url "$url")
+    if [ -n "$bearer_env" ]; then
+      add_args+=(--bearer-token-env-var "$bearer_env")
+    fi
+
+    if codex mcp get "$name" >/dev/null 2>&1; then
+      local current_url current_bearer_env
+      current_url="$(codex_mcp_field "$name" "url")"
+      current_bearer_env="$(codex_mcp_field "$name" "bearer_token_env_var")"
+      [ "$current_bearer_env" = "-" ] && current_bearer_env=""
+
+      if [ "$current_url" = "$url" ] && [ "$current_bearer_env" = "$bearer_env" ]; then
+        log_ok "$name (already configured)"
+      else
+        log_action "refreshing $name MCP config ..."
+        codex mcp remove "$name" >/dev/null 2>&1 || true
+        MCP_OUTPUT=$(codex mcp add "${add_args[@]}" 2>&1) && MCP_EXIT=0 || MCP_EXIT=$?
+        if [ $MCP_EXIT -eq 0 ]; then
+          log_ok "$name MCP refreshed"
+        else
+          echo "$MCP_OUTPUT" | sed 's/^/    /'
+          log_warn "Failed to refresh $name MCP"
+        fi
+      fi
+    else
+      log_action "adding $name MCP ..."
+      MCP_OUTPUT=$(codex mcp add "${add_args[@]}" 2>&1) && MCP_EXIT=0 || MCP_EXIT=$?
+      if [ $MCP_EXIT -eq 0 ]; then
+        log_ok "$name MCP added"
+      else
+        echo "$MCP_OUTPUT" | sed 's/^/    /'
+        log_warn "Failed to add $name MCP"
+      fi
+    fi
+
+    if [ "$auth" = "oauth" ]; then
+      log_info "If $name needs authentication on this machine, run: codex mcp login $name"
+    elif [ "$auth" = "bearer" ] && [ -n "$bearer_env" ]; then
+      if [ -n "${!bearer_env:-}" ]; then
+        log_ok "$name auth env present: $bearer_env"
+      else
+        log_warn "$name requires env var $bearer_env"
+        log_info "Export $bearer_env, then retry Codex."
+      fi
+    fi
+  done < <(jq -c '.[]' "$file")
+
+  echo ""
 }
 
 echo -e "${BOLD}=== Agent Harness Setup ===${NC}"
@@ -306,37 +389,54 @@ PYEOF
     log_ok "merged [profiles.harness] from profile.toml"
   fi
 
-  # 5. Add project_doc_fallback_filenames at global level (before first [section])
-  HAS_GLOBAL_FALLBACK=$(python3 - "$CONFIG_TOML" <<'PYEOF'
-import sys
-in_section = False
-for line in open(sys.argv[1]):
-    if line.strip().startswith('['):
-        in_section = True
-    if not in_section and 'project_doc_fallback_filenames' in line:
-        print('yes'); break
-else:
-    print('no')
-PYEOF
-)
-  if [ "$HAS_GLOBAL_FALLBACK" = "yes" ]; then
-    log_skip "project_doc_fallback_filenames already at global level"
-  else
-    python3 - "$CONFIG_TOML" <<'PYEOF'
+  # 5. Set project_doc_fallback_filenames at global level (before first [section])
+  FALLBACK_STATUS=$(python3 - "$CONFIG_TOML" <<'PYEOF'
 import sys
 path = sys.argv[1]
+target = 'project_doc_fallback_filenames = ["AGENTS.md", "CLAUDE.md"]\n'
 lines = open(path).readlines()
+
+global_lines = []
+rest_lines = []
+in_section = False
+for line in lines:
+    if not in_section and line.strip().startswith('['):
+        in_section = True
+    if in_section:
+        rest_lines.append(line)
+    else:
+        global_lines.append(line)
+
+had_target = False
+had_other = False
+filtered_globals = []
+for line in global_lines:
+    stripped = line.strip()
+    if stripped.startswith('project_doc_fallback_filenames'):
+        if stripped == target.strip():
+            had_target = True
+        else:
+            had_other = True
+        continue
+    filtered_globals.append(line)
+
 insert_at = 0
-for i, line in enumerate(lines):
-    if line.strip().startswith('['):
-        break
+for i, line in enumerate(filtered_globals):
     if line.strip() and not line.strip().startswith('#'):
         insert_at = i + 1
-lines.insert(insert_at, 'project_doc_fallback_filenames = ["CLAUDE.md"]\n')
-open(path, 'w').writelines(lines)
+filtered_globals.insert(insert_at, target)
+
+status = 'already' if had_target and not had_other else ('updated' if had_target or had_other else 'added')
+open(path, 'w').writelines(filtered_globals + rest_lines)
+print(status)
 PYEOF
-    log_ok "added project_doc_fallback_filenames at global level"
-  fi
+)
+  case "$FALLBACK_STATUS" in
+    already) log_skip "project_doc_fallback_filenames already at global level" ;;
+    updated) log_ok "updated project_doc_fallback_filenames at global level" ;;
+    added)   log_ok "added project_doc_fallback_filenames at global level" ;;
+    *)       log_warn "Unable to confirm project_doc_fallback_filenames status" ;;
+  esac
 
   # 6. Trust this harness repo to avoid repeated workspace trust prompts
   TRUST_STATUS=$(python3 - "$CONFIG_TOML" "$REPO_DIR" <<'PYEOF'
@@ -484,6 +584,8 @@ PYEOF
     elif [ -f "$EXTERNAL_SKILLS_FILE" ] && [ ! -f "$SKILL_INSTALLER" ]; then
       log_warn "External skills declared but skill installer not found. Run 'codex' once first."
     fi
+
+    sync_codex_mcp_servers "$CODEX_MCP_FILE"
   fi
 fi
 
@@ -607,4 +709,8 @@ fi
 
 # Reload shell to apply changes
 echo -e "${DIM}Reloading shell...${NC}"
-exec "$SHELL" -l
+if [ -t 0 ] && [ -t 1 ]; then
+  exec "$SHELL" -l
+else
+  log_info "Non-interactive shell detected. Run 'source ${RC_FILE:-~/.zshrc}' or open a new shell."
+fi

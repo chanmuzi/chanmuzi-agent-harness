@@ -1,0 +1,15 @@
+[
+  {
+    "name": "figma",
+    "transport": "streamable_http",
+    "url": "https://mcp.figma.com/mcp",
+    "auth": "oauth"
+  },
+  {
+    "name": "github-copilot",
+    "transport": "streamable_http",
+    "url": "https://api.githubcopilot.com/mcp/",
+    "auth": "bearer",
+    "bearer_token_env_var": "CODEX_GITHUB_PERSONAL_ACCESS_TOKEN"
+  }
+]

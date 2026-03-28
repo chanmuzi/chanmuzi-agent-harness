@@ -11,6 +11,7 @@ REPO_DIR="${REPO_DIR%/.}"
 CLAUDE_DIR="$HOME/.claude"
 CODEX_DIR="$HOME/.codex"
 AGENTS_DIR="$HOME/.agents"
+CODEX_MCP_FILE="$REPO_DIR/codex/mcp-servers.json"
 
 ERRORS=0
 WARNINGS=0
@@ -47,6 +48,11 @@ check_shared_skill_if_present() {
   if [ -d "$src" ]; then
     check_symlink "$dst" "$src" "skill: $skill_name"
   fi
+}
+
+codex_mcp_field() {
+  local name="$1" field="$2"
+  codex mcp get "$name" 2>/dev/null | awk -F': ' -v key="$field" '$1 ~ "^  " key "$" {print $2}'
 }
 
 # ══════════════════════════════════════════
@@ -150,10 +156,24 @@ if [ -f "$CONFIG_TOML" ]; then
     WARNINGS=$((WARNINGS + 1))
   fi
 
-  if grep -q 'project_doc_fallback_filenames' "$CONFIG_TOML"; then
+  GLOBAL_FALLBACK_OK=$(python3 - "$CONFIG_TOML" <<'PYEOF'
+import sys
+target = 'project_doc_fallback_filenames = ["AGENTS.md", "CLAUDE.md"]'
+for line in open(sys.argv[1]):
+    stripped = line.strip()
+    if stripped.startswith('['):
+        print('no')
+        raise SystemExit
+    if stripped.startswith('project_doc_fallback_filenames'):
+        print('yes' if stripped == target else 'no')
+        raise SystemExit
+print('no')
+PYEOF
+)
+  if [ "$GLOBAL_FALLBACK_OK" = "yes" ]; then
     log_ok "project_doc_fallback_filenames set"
   else
-    log_warn "project_doc_fallback_filenames missing"
+    log_warn "project_doc_fallback_filenames missing or outdated"
     WARNINGS=$((WARNINGS + 1))
   fi
 
@@ -251,11 +271,55 @@ if [ -f "$PROFILE_TOML" ]; then
     WARNINGS=$((WARNINGS + 1))
   fi
 
-  if grep -q '^project_doc_fallback_filenames' "$PROFILE_TOML"; then
+  if grep -Fq 'project_doc_fallback_filenames = ["AGENTS.md", "CLAUDE.md"]' "$PROFILE_TOML"; then
     log_ok "codex/profile.toml sets project_doc_fallback_filenames"
   else
-    log_warn "codex/profile.toml missing project_doc_fallback_filenames"
+    log_warn "codex/profile.toml missing or outdated project_doc_fallback_filenames"
     WARNINGS=$((WARNINGS + 1))
+  fi
+fi
+
+if [ -f "$CODEX_MCP_FILE" ] && command -v jq &>/dev/null; then
+  if jq -e 'all(.[]; (.name | type == "string") and (.transport == "streamable_http") and (.url | type == "string") and (.auth | type == "string"))' "$CODEX_MCP_FILE" >/dev/null 2>&1; then
+    log_ok "codex/mcp-servers.json schema"
+  else
+    log_warn "codex/mcp-servers.json schema mismatch"
+    WARNINGS=$((WARNINGS + 1))
+  fi
+
+  if command -v codex >/dev/null 2>&1; then
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+      name="$(echo "$entry" | jq -r '.name')"
+      url="$(echo "$entry" | jq -r '.url')"
+      auth="$(echo "$entry" | jq -r '.auth')"
+      bearer_env="$(echo "$entry" | jq -r '.bearer_token_env_var // empty')"
+
+      if codex mcp get "$name" >/dev/null 2>&1; then
+        current_url="$(codex_mcp_field "$name" "url")"
+        current_bearer_env="$(codex_mcp_field "$name" "bearer_token_env_var")"
+        [ "$current_bearer_env" = "-" ] && current_bearer_env=""
+
+        if [ "$current_url" = "$url" ] && [ "$current_bearer_env" = "$bearer_env" ]; then
+          log_ok "mcp: $name"
+        else
+          log_warn "mcp: $name config drift detected"
+          WARNINGS=$((WARNINGS + 1))
+        fi
+      else
+        log_warn "mcp: $name not configured"
+        WARNINGS=$((WARNINGS + 1))
+      fi
+
+      if [ "$auth" = "bearer" ] && [ -n "$bearer_env" ]; then
+        if [ -n "${!bearer_env:-}" ]; then
+          log_ok "mcp auth env: $bearer_env"
+        else
+          log_warn "mcp auth env missing: $bearer_env"
+          WARNINGS=$((WARNINGS + 1))
+        fi
+      fi
+    done < <(jq -c '.[]' "$CODEX_MCP_FILE")
   fi
 fi
 echo ""
