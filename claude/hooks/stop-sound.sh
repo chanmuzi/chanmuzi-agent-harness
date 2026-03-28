@@ -4,22 +4,16 @@
 
 command -v jq &>/dev/null || exit 0
 
-resolve_script_dir() {
-  local source_path="${BASH_SOURCE[0]}"
-  while [ -L "$source_path" ]; do
-    local source_dir
-    source_dir="$(cd "$(dirname "$source_path")" && pwd)"
-    source_path="$(readlink "$source_path")"
-    [ "${source_path#/}" = "$source_path" ] && source_path="$source_dir/$source_path"
-  done
-  cd "$(dirname "$source_path")" && pwd
-}
-
 INPUT=$(cat)
 EVENT=$(echo "$INPUT" | jq -r '.hook_event_name')
 
 if [ "$EVENT" = "Stop" ]; then
-  SCRIPT_DIR="$(resolve_script_dir)"
-  . "$SCRIPT_DIR/../../shared/lib/os.sh" 2>/dev/null || exit 0
+  HARNESS_HOME="${CHANMUZI_AGENT_HARNESS_HOME:-}"
+  if [ -z "$HARNESS_HOME" ]; then
+    # Resolve symlink to find repo root
+    REAL_PATH="$(readlink -f "$0" 2>/dev/null || readlink "$0")"
+    HARNESS_HOME="$(cd "$(dirname "$REAL_PATH")/../.." && pwd)"
+  fi
+  . "$HARNESS_HOME/shared/lib/os.sh" 2>/dev/null
   play_sound "" 0.2
 fi
