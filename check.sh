@@ -260,7 +260,9 @@ if [ -f "$CODEX_MCP_FILE" ] && command -v jq &>/dev/null; then
     WARNINGS=$((WARNINGS + 1))
   fi
 
-  if command -v codex >/dev/null 2>&1; then
+  if [ "$(jq 'length' "$CODEX_MCP_FILE")" -eq 0 ]; then
+    log_ok "no managed MCP servers declared"
+  elif command -v codex >/dev/null 2>&1; then
     while IFS= read -r entry; do
       [ -z "$entry" ] && continue
       name="$(echo "$entry" | jq -r '.name')"

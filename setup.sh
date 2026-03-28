@@ -50,13 +50,8 @@ link_shared_skill_if_present() {
   fi
 }
 
-codex_mcp_field() {
-  local name="$1" field="$2"
-  codex mcp get "$name" 2>/dev/null | awk -F': ' -v key="$field" '$1 ~ "^  " key "$" {print $2}'
-}
-
 sync_codex_mcp_servers() {
-  local file="$1"
+  local file="$1" config_toml="$2"
   [ -f "$file" ] || return 0
 
   if ! command -v jq >/dev/null 2>&1; then
@@ -72,6 +67,12 @@ sync_codex_mcp_servers() {
     return 0
   fi
 
+  if [ "$(jq 'length' "$file")" -eq 0 ]; then
+    log_skip "no managed MCP servers declared"
+    echo ""
+    return 0
+  fi
+
   while IFS= read -r entry; do
     [ -z "$entry" ] && continue
 
@@ -81,40 +82,58 @@ sync_codex_mcp_servers() {
     auth="$(echo "$entry" | jq -r '.auth')"
     bearer_env="$(echo "$entry" | jq -r '.bearer_token_env_var // empty')"
 
-    local add_args=()
-    add_args+=("$name" --url "$url")
-    if [ -n "$bearer_env" ]; then
-      add_args+=(--bearer-token-env-var "$bearer_env")
-    fi
+    log_action "syncing $name MCP in config.toml ..."
+    MCP_OUTPUT=$(python3 - "$config_toml" "$name" "$url" "$bearer_env" <<'PYEOF'
+import sys
 
-    if codex mcp get "$name" >/dev/null 2>&1; then
-      local current_url current_bearer_env
-      current_url="$(codex_mcp_field "$name" "url")"
-      current_bearer_env="$(codex_mcp_field "$name" "bearer_token_env_var")"
-      [ "$current_bearer_env" = "-" ] && current_bearer_env=""
+path, name, url, bearer_env = sys.argv[1:5]
+header = f"[mcp_servers.{name}]"
+lines = open(path).read().splitlines(True)
 
-      if [ "$current_url" = "$url" ] && [ "$current_bearer_env" = "$bearer_env" ]; then
-        log_ok "$name (already configured)"
-      else
-        log_action "refreshing $name MCP config ..."
-        codex mcp remove "$name" >/dev/null 2>&1 || true
-        MCP_OUTPUT=$(codex mcp add "${add_args[@]}" 2>&1) && MCP_EXIT=0 || MCP_EXIT=$?
-        if [ $MCP_EXIT -eq 0 ]; then
-          log_ok "$name MCP refreshed"
-        else
-          echo "$MCP_OUTPUT" | sed 's/^/    /'
-          log_warn "Failed to refresh $name MCP"
-        fi
-      fi
+start = None
+end = len(lines)
+for i, line in enumerate(lines):
+    if line.strip() == header:
+        start = i
+        for j in range(i + 1, len(lines)):
+            if lines[j].strip().startswith("["):
+                end = j
+                break
+        break
+
+block = [f"{header}\n", f'url = "{url}"\n']
+if bearer_env:
+    block.append(f'bearer_token_env_var = "{bearer_env}"\n')
+
+if start is None:
+    if lines and lines[-1].strip():
+        lines.append("\n")
+    lines.extend(block)
+    status = "added"
+else:
+    replacement = lines[start:end]
+    normalized_old = [line.strip() for line in replacement if line.strip()]
+    normalized_new = [line.strip() for line in block if line.strip()]
+    if normalized_old == normalized_new:
+        status = "already"
+    else:
+        lines[start:end] = block
+        status = "updated"
+
+open(path, "w").writelines(lines)
+print(status)
+PYEOF
+) && MCP_EXIT=0 || MCP_EXIT=$?
+    if [ $MCP_EXIT -eq 0 ]; then
+      case "$MCP_OUTPUT" in
+        already) log_ok "$name (already configured)" ;;
+        added)   log_ok "$name MCP added to config.toml" ;;
+        updated) log_ok "$name MCP updated in config.toml" ;;
+        *)       log_ok "$name MCP synced" ;;
+      esac
     else
-      log_action "adding $name MCP ..."
-      MCP_OUTPUT=$(codex mcp add "${add_args[@]}" 2>&1) && MCP_EXIT=0 || MCP_EXIT=$?
-      if [ $MCP_EXIT -eq 0 ]; then
-        log_ok "$name MCP added"
-      else
-        echo "$MCP_OUTPUT" | sed 's/^/    /'
-        log_warn "Failed to add $name MCP"
-      fi
+      echo "$MCP_OUTPUT" | sed 's/^/    /'
+      log_warn "Failed to sync $name MCP"
     fi
 
     if [ "$auth" = "oauth" ]; then
@@ -536,7 +555,7 @@ PYEOF
       log_warn "External skills declared but skill installer not found. Run 'codex' once first."
     fi
 
-    sync_codex_mcp_servers "$CODEX_MCP_FILE"
+    sync_codex_mcp_servers "$CODEX_MCP_FILE" "$CONFIG_TOML"
   fi
 fi
 
