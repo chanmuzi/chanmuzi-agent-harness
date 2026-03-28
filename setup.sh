@@ -213,7 +213,30 @@ TOML
     log_ok "created config.toml with defaults"
   fi
 
-  # 1. Remove model_instructions_file (migrated to AGENTS.md)
+  # 1. Remove global model pinning (let Codex use its own default)
+  REMOVED_MODEL=false
+  if grep -q '^model ' "$CONFIG_TOML" || grep -q '^model_reasoning_effort' "$CONFIG_TOML"; then
+    python3 - "$CONFIG_TOML" <<'PYEOF'
+import sys
+path = sys.argv[1]
+lines = open(path).readlines()
+out, in_section = [], False
+for line in lines:
+    if line.strip().startswith('['):
+        in_section = True
+    if not in_section and (line.startswith('model ') or line.startswith('model_reasoning_effort')):
+        continue
+    out.append(line)
+open(path, 'w').writelines(out)
+PYEOF
+    log_ok "removed global model/model_reasoning_effort (let Codex decide)"
+    REMOVED_MODEL=true
+  fi
+  if [ "$REMOVED_MODEL" = false ]; then
+    log_skip "global model pinning already absent"
+  fi
+
+  # 2. Remove model_instructions_file (migrated to AGENTS.md)
   if grep -q 'model_instructions_file' "$CONFIG_TOML"; then
     sed_inplace '/^model_instructions_file/d' "$CONFIG_TOML"
     log_ok "removed model_instructions_file (migrated to AGENTS.md)"
@@ -221,7 +244,7 @@ TOML
     log_skip "model_instructions_file already absent"
   fi
 
-  # 2. Enable codex_hooks feature (also fix false → true)
+  # 3. Enable codex_hooks feature (also fix false → true)
   if grep -q 'codex_hooks = true' "$CONFIG_TOML"; then
     log_skip "codex_hooks already enabled"
   elif grep -q 'codex_hooks' "$CONFIG_TOML"; then
@@ -236,7 +259,7 @@ codex_hooks = true' "$CONFIG_TOML"
     log_ok "added [features] codex_hooks = true"
   fi
 
-  # 3. Merge [profiles.harness] block (remove old, append new)
+  # 4. Merge [profiles.harness] block (remove old, append new)
   PROFILE_SRC="$REPO_DIR/codex/profile.toml"
   if [ -f "$PROFILE_SRC" ]; then
     # Remove existing [profiles.harness] block using line-by-line parsing
@@ -269,7 +292,7 @@ PYEOF
     log_ok "merged [profiles.harness] from profile.toml"
   fi
 
-  # 4. Add project_doc_fallback_filenames at global level (before first [section])
+  # 5. Add project_doc_fallback_filenames at global level (before first [section])
   HAS_GLOBAL_FALLBACK=$(python3 - "$CONFIG_TOML" <<'PYEOF'
 import sys
 in_section = False
