@@ -74,7 +74,8 @@ install_dev_browser_cli() {
     return 0
   fi
 
-  if command -v dev-browser >/dev/null 2>&1; then
+  DEV_BROWSER_VERSION=$(dev-browser --version 2>&1) && DEV_BROWSER_WORKS=true || DEV_BROWSER_WORKS=false
+  if [ "$DEV_BROWSER_WORKS" = true ]; then
     DEV_BROWSER_INSTALL_OUTPUT=$(dev-browser install 2>&1) && DEV_BROWSER_INSTALL_EXIT=0 || DEV_BROWSER_INSTALL_EXIT=$?
     if [ $DEV_BROWSER_INSTALL_EXIT -eq 0 ]; then
       log_ok "dev-browser runtime installed"
@@ -82,9 +83,10 @@ install_dev_browser_cli() {
       echo "$DEV_BROWSER_INSTALL_OUTPUT" | sed 's/^/    /'
       log_warn "Failed to install dev-browser runtime"
     fi
-    log_ok "dev-browser: $(dev-browser --version 2>/dev/null || echo 'installed')"
+    log_ok "dev-browser: $DEV_BROWSER_VERSION"
   else
-    log_warn "dev-browser command not found after install"
+    echo "$DEV_BROWSER_VERSION" | sed 's/^/    /'
+    log_warn "dev-browser CLI installed but not executable (check GLIBC or platform compatibility)"
   fi
   echo ""
 }
