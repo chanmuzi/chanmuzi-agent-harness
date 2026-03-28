@@ -46,7 +46,8 @@ link_shared_skill_if_present() {
     link_file "$src" "$dst"
   else
     log_warn "$skill_name not found in $src"
-    log_info "Install $skill_name into ~/.agents/skills first, then re-run setup."
+    log_info "This is non-fatal. Other setup steps continue."
+    log_info "Create ~/.agents/skills/$skill_name and place SKILL.md there, then re-run: ./setup.sh --codex"
   fi
 }
 
