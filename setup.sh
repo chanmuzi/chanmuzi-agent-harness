@@ -345,7 +345,7 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
     PATCHED=0
     while IFS= read -r skill_file; do
       [ -z "$skill_file" ] && continue
-      if grep -q '"threshold": 0\.2' "$skill_file"; then
+      if grep -qE '"threshold":[[:space:]]*0\.2|"ambiguityThreshold":[[:space:]]*0\.2|\(default:? 0\.2\)|below 20%|≤ ?20%' "$skill_file"; then
         sed_inplace 's/"threshold": 0\.2/"threshold": 0.1/' "$skill_file"
         sed_inplace 's/(default 0\.2)/(default 0.1)/' "$skill_file"
         sed_inplace 's/(default: 20%)/(default: 10%)/' "$skill_file"
