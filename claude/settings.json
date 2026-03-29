@@ -95,7 +95,6 @@
     "frontend-design@claude-plugins-official": false,
     "playwright@claude-plugins-official": false,
     "ralph-loop@claude-plugins-official": false,
-    "upstage-design@upstage-design": false,
     "code-review@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
@@ -115,12 +114,6 @@
       "source": {
         "source": "github",
         "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
-      }
-    },
-    "upstage-design": {
-      "source": {
-        "source": "github",
-        "repo": "UpstageAI/upstage-design-plugin"
       }
     }
   },
