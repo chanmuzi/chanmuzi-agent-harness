@@ -591,6 +591,7 @@ PYEOF
 
     # ── External Skills (from external-skills.json) ──
     EXTERNAL_SKILLS_FILE="$REPO_DIR/codex/external-skills.json"
+    SKILL_LISTER="$CODEX_DIR/skills/.system/skill-installer/scripts/list-skills.py"
     if [ -f "$EXTERNAL_SKILLS_FILE" ] && [ -f "$SKILL_INSTALLER" ]; then
       log_section "  External Skills..."
 
@@ -598,11 +599,37 @@ PYEOF
       for i in $(seq 0 $((EXT_COUNT - 1))); do
         EXT_REPO=$(jq -r ".[$i].repo" "$EXTERNAL_SKILLS_FILE")
         EXT_REF=$(jq -r ".[$i].ref // \"main\"" "$EXTERNAL_SKILLS_FILE")
+        EXT_DISCOVER=$(jq -r ".[$i].discover // empty" "$EXTERNAL_SKILLS_FILE")
 
         REMOTE_SHA=$(get_remote_sha "$EXT_REPO" "$EXT_REF")
         [ -z "$REMOTE_SHA" ] && log_warn "Could not fetch remote ref for $EXT_REPO — skipping update check"
 
+        # Build skill paths: auto-discover via list-skills.py or use explicit paths
+        SKILL_PATHS=""
+        if [ -n "$EXT_DISCOVER" ]; then
+          if [ -f "$SKILL_LISTER" ]; then
+            DISCOVER_OUTPUT=$(python3 "$SKILL_LISTER" \
+              --repo "$EXT_REPO" --path "$EXT_DISCOVER" --ref "$EXT_REF" \
+              --format json 2>/dev/null) && DISCOVER_EXIT=0 || DISCOVER_EXIT=$?
+            if [ $DISCOVER_EXIT -eq 0 ]; then
+              SKILL_PATHS=$(echo "$DISCOVER_OUTPUT" | jq -er ".[].name | \"$EXT_DISCOVER/\" + ." 2>/dev/null) || {
+                log_warn "Failed to parse discovered skills JSON from $EXT_REPO/$EXT_DISCOVER — skipping"
+                continue
+              }
+            else
+              log_warn "Failed to discover skills from $EXT_REPO/$EXT_DISCOVER — skipping"
+              continue
+            fi
+          else
+            log_warn "list-skills.py not found — cannot auto-discover from $EXT_REPO"
+            continue
+          fi
+        else
+          SKILL_PATHS=$(jq -r ".[$i].paths[]" "$EXTERNAL_SKILLS_FILE")
+        fi
+
         while IFS= read -r skill_path; do
+          [ -z "$skill_path" ] && continue
           skill_name="$(basename "$skill_path")"
           SKILL_DIR="$CODEX_DIR/skills/$skill_name"
 
@@ -638,7 +665,7 @@ PYEOF
             echo "$SKILL_OUTPUT" | sed 's/^/    /'
             log_warn "Failed to install $skill_name from $EXT_REPO"
           fi
-        done < <(jq -r ".[$i].paths[]" "$EXTERNAL_SKILLS_FILE")
+        done <<< "$SKILL_PATHS"
       done
       echo ""
     elif [ -f "$EXTERNAL_SKILLS_FILE" ] && [ ! -f "$SKILL_INSTALLER" ]; then
