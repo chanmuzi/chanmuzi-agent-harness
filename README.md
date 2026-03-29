@@ -242,6 +242,19 @@ Codex의 `config.toml`에서 harness가 관리하는 영역은 `[profiles.harnes
 현재 harness 저장소의 `projects."<repo path>".trust_level` 엔트리뿐이며,
 다른 `projects.*`, `mcp_servers.*`, `plugins.*`는 건드리지 않습니다.
 
+### OMC 플러그인 패치
+
+`oh-my-claudecode` 플러그인의 일부 스킬은 `settings.json`에서 설정을 읽도록
+문서화되어 있지만, Claude Code의 스키마 검증이 `"omc"` 키를 허용하지 않습니다.
+이 harness는 플러그인 설치 후 SKILL.md를 직접 패치하여 커스텀 설정을 적용합니다.
+
+| 스킬 | 패치 내용 | 이유 |
+|------|-----------|------|
+| `deep-interview` | ambiguity threshold `0.2` → `0.1` | 더 엄격한 기준으로 모호성을 꼼꼼히 다루기 위함 (10% 이하까지 확인 필요) |
+
+플러그인 업데이트 시 SKILL.md가 초기화되므로, 업데이트 후 `./setup.sh --claude`를
+다시 실행하면 패치가 자동 재적용됩니다.
+
 `oh-my-codex`를 함께 사용할 때도 이 원칙은 유지합니다.
 따라서 OMX는 전역 `user` scope가 아니라 프로젝트 로컬 `project` scope로만 사용하는 것을 권장합니다.
 

@@ -335,6 +335,36 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
     echo -e "  Plugins: ${GREEN}$INSTALL_COUNT new${NC}, ${DIM}$SKIP_COUNT present${NC}, ${DIM}$REMOVE_COUNT removed${NC}, ${RED}$FAIL_COUNT failed${NC}"
   fi
   echo ""
+
+  # ── OMC Plugin Patches ──
+  OMC_CACHE="$CLAUDE_DIR/plugins/cache/omc/oh-my-claudecode"
+  if [ -d "$OMC_CACHE" ]; then
+    log_section "  OMC Plugin Patches..."
+
+    # deep-interview: lower ambiguity threshold 0.2 → 0.1
+    PATCHED=0
+    while IFS= read -r skill_file; do
+      [ -z "$skill_file" ] && continue
+      if grep -q '"threshold": 0\.2' "$skill_file"; then
+        sed_inplace 's/"threshold": 0\.2/"threshold": 0.1/' "$skill_file"
+        sed_inplace 's/(default 0\.2)/(default 0.1)/' "$skill_file"
+        sed_inplace 's/(default: 20%)/(default: 10%)/' "$skill_file"
+        sed_inplace 's/below 20%/below 10%/g' "$skill_file"
+        sed_inplace 's/"ambiguityThreshold": 0\.2/"ambiguityThreshold": 0.1/' "$skill_file"
+        sed_inplace 's/≤ 20%/≤ 10%/g' "$skill_file"
+        sed_inplace 's/≤20%/≤10%/g' "$skill_file"
+        log_ok "deep-interview threshold: 0.2 → 0.1"
+        PATCHED=1
+      else
+        log_skip "deep-interview threshold already patched"
+      fi
+    done < <(find "$OMC_CACHE" -path "*/deep-interview/SKILL.md" 2>/dev/null)
+
+    if [ "$PATCHED" -eq 0 ] && ! find "$OMC_CACHE" -path "*/deep-interview/SKILL.md" -print -quit 2>/dev/null | grep -q .; then
+      log_skip "deep-interview SKILL.md not found in cache"
+    fi
+    echo ""
+  fi
 fi
 
 # ══════════════════════════════════════════
