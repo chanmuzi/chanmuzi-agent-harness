@@ -338,11 +338,15 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
 
   # ── OMC Plugin Patches ──
   OMC_CACHE="$CLAUDE_DIR/plugins/cache/omc/oh-my-claudecode"
-  if [ -d "$OMC_CACHE" ]; then
+  OMC_MARKETPLACE="$CLAUDE_DIR/plugins/marketplaces/omc/skills"
+  if [ -d "$OMC_CACHE" ] || [ -d "$OMC_MARKETPLACE" ]; then
     log_section "  OMC Plugin Patches..."
 
     # deep-interview: lower ambiguity threshold 0.2 → 0.1
     PATCHED=0
+    SEARCH_DIRS=""
+    [ -d "$OMC_CACHE" ] && SEARCH_DIRS="$OMC_CACHE"
+    [ -d "$OMC_MARKETPLACE" ] && SEARCH_DIRS="$SEARCH_DIRS $OMC_MARKETPLACE"
     while IFS= read -r skill_file; do
       [ -z "$skill_file" ] && continue
       if grep -qE '"threshold":[[:space:]]*0\.2|"ambiguityThreshold":[[:space:]]*0\.2|\(default:? 0\.2\)|below 20%|≤ ?20%' "$skill_file"; then
@@ -358,9 +362,9 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
       else
         log_skip "deep-interview threshold already patched"
       fi
-    done < <(find "$OMC_CACHE" -path "*/deep-interview/SKILL.md" 2>/dev/null)
+    done < <(find $SEARCH_DIRS -path "*/deep-interview/SKILL.md" 2>/dev/null)
 
-    if [ "$PATCHED" -eq 0 ] && ! find "$OMC_CACHE" -path "*/deep-interview/SKILL.md" -print -quit 2>/dev/null | grep -q .; then
+    if [ "$PATCHED" -eq 0 ] && ! find $SEARCH_DIRS -path "*/deep-interview/SKILL.md" -print -quit 2>/dev/null | grep -q .; then
       log_skip "deep-interview SKILL.md not found in cache"
     fi
     echo ""
