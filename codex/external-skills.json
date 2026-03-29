@@ -2,7 +2,7 @@
   {
     "repo": "chanmuzi/git-conventions",
     "ref": "main",
-    "paths": ["skills/commit", "skills/pr", "skills/review"]
+    "discover": "skills"
   },
   {
     "repo": "sawyerhood/dev-browser",
