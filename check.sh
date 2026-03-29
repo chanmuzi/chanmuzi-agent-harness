@@ -238,7 +238,7 @@ EXTERNAL_SKILLS_FILE="$REPO_DIR/codex/external-skills.json"
 if [ -f "$EXTERNAL_SKILLS_FILE" ] && command -v jq &>/dev/null; then
   # Schema: each entry needs repo (string), optional ref (string),
   # and either paths (string[]) or discover (string) — but not both empty
-  if jq -e 'all(.[]; (.repo | type == "string") and ((.ref // "main") | type == "string") and ((.paths | type == "array" and length > 0 and all(.[]; type == "string")) or (.discover | type == "string" and length > 0)))' "$EXTERNAL_SKILLS_FILE" >/dev/null 2>&1; then
+  if jq -e 'all(.[]; (.repo | type == "string") and ((.ref // "main") | type == "string") and ((.discover // null) | . == null or type == "string") and ((.paths | type == "array" and length > 0 and all(.[]; type == "string")) or (.discover | type == "string" and length > 0)))' "$EXTERNAL_SKILLS_FILE" >/dev/null 2>&1; then
     log_ok "codex/external-skills.json schema"
   else
     log_warn "codex/external-skills.json schema mismatch"
@@ -259,6 +259,11 @@ if [ -f "$EXTERNAL_SKILLS_FILE" ] && command -v jq &>/dev/null; then
           --repo "$EXT_REPO" --path "$EXT_DISCOVER" --ref "$EXT_REF" \
           --format json 2>/dev/null) && DISCOVER_OK=true || DISCOVER_OK=false
         if [ "$DISCOVER_OK" = true ] && [ -n "$DISCOVER_JSON" ]; then
+          DISCOVER_NAMES=$(echo "$DISCOVER_JSON" | jq -er '.[].name' 2>/dev/null) || {
+            log_warn "failed to parse discovered skills JSON from $EXT_REPO/$EXT_DISCOVER"
+            WARNINGS=$((WARNINGS + 1))
+            DISCOVER_NAMES=""
+          }
           while IFS= read -r skill_name; do
             [ -z "$skill_name" ] && continue
             if [ -d "$CODEX_DIR/skills/$skill_name" ]; then
@@ -267,7 +272,7 @@ if [ -f "$EXTERNAL_SKILLS_FILE" ] && command -v jq &>/dev/null; then
               log_warn "skill: $skill_name not installed (discovered from $EXT_REPO)"
               WARNINGS=$((WARNINGS + 1))
             fi
-          done < <(echo "$DISCOVER_JSON" | jq -r '.[].name')
+          done <<< "$DISCOVER_NAMES"
         else
           log_warn "could not discover skills from $EXT_REPO/$EXT_DISCOVER (network?)"
           WARNINGS=$((WARNINGS + 1))

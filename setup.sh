@@ -610,14 +610,14 @@ PYEOF
           if [ -f "$SKILL_LISTER" ]; then
             DISCOVER_OUTPUT=$(python3 "$SKILL_LISTER" \
               --repo "$EXT_REPO" --path "$EXT_DISCOVER" --ref "$EXT_REF" \
-              --format json 2>&1) && DISCOVER_EXIT=0 || DISCOVER_EXIT=$?
+              --format json 2>/dev/null) && DISCOVER_EXIT=0 || DISCOVER_EXIT=$?
             if [ $DISCOVER_EXIT -eq 0 ]; then
-              SKILL_PATHS=$(echo "$DISCOVER_OUTPUT" | jq -r '.[].name' | while read -r name; do
-                echo "$EXT_DISCOVER/$name"
-              done)
+              SKILL_PATHS=$(echo "$DISCOVER_OUTPUT" | jq -er ".[].name | \"$EXT_DISCOVER/\" + ." 2>/dev/null) || {
+                log_warn "Failed to parse discovered skills JSON from $EXT_REPO/$EXT_DISCOVER — skipping"
+                continue
+              }
             else
               log_warn "Failed to discover skills from $EXT_REPO/$EXT_DISCOVER — skipping"
-              echo "$DISCOVER_OUTPUT" | sed 's/^/    /'
               continue
             fi
           else
