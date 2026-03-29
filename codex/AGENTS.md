@@ -12,6 +12,9 @@
 - For risky or irreversible actions, ask for explicit approval first.
 - Keep commits, branches, and PR-related actions approval-based.
 
+## Verification
+- When modifying harness files (`setup.sh`, `check.sh`, configs, hooks), run `./setup.sh` and `./check.sh` to confirm no errors before reporting completion.
+
 ## Technical Context
 - Primary language: Python
 - Familiar stack: LangGraph, FastAPI, Docker
