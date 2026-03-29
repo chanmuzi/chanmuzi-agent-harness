@@ -54,6 +54,19 @@ link_shared_skill_if_present() {
   fi
 }
 
+get_remote_sha() {
+  local repo="$1" ref="${2:-main}"
+  git ls-remote "https://github.com/$repo.git" "$ref" 2>/dev/null | awk '{print $1}'
+}
+
+write_installed_ref() {
+  echo "$2" > "$1/.installed-ref"
+}
+
+read_installed_ref() {
+  [ -f "$1/.installed-ref" ] && cat "$1/.installed-ref" || echo ""
+}
+
 install_dev_browser_cli() {
   if ! command -v npm >/dev/null 2>&1; then
     log_warn "npm not found. Skipping dev-browser CLI install."
@@ -523,6 +536,9 @@ PYEOF
       log_section "  Skills..."
 
       if [ -f "$SKILL_INSTALLER" ]; then
+        OPENAI_SKILLS_SHA=$(get_remote_sha "openai/skills" "main")
+        [ -z "$OPENAI_SKILLS_SHA" ] && log_warn "Could not fetch remote ref for openai/skills — skipping update check"
+
         while IFS= read -r skill_name; do
           # Skip comments and empty lines
           skill_name="$(echo "$skill_name" | sed 's/#.*//' | xargs)"
@@ -537,19 +553,36 @@ PYEOF
             continue
           fi
 
-          if [ -d "$CODEX_DIR/skills/$skill_name" ]; then
-            log_ok "$skill_name (already installed)"
+          SKILL_DIR="$CODEX_DIR/skills/$skill_name"
+          if [ -d "$SKILL_DIR" ]; then
+            INSTALLED_SHA="$(read_installed_ref "$SKILL_DIR")"
+            if [ -z "$OPENAI_SKILLS_SHA" ]; then
+              log_ok "$skill_name (already installed)"
+              continue
+            fi
+            if [ "$INSTALLED_SHA" = "$OPENAI_SKILLS_SHA" ]; then
+              log_ok "$skill_name (up to date)"
+              continue
+            fi
+            if [ -n "$INSTALLED_SHA" ]; then
+              log_action "updating $skill_name (${INSTALLED_SHA:0:7} → ${OPENAI_SKILLS_SHA:0:7}) ..."
+            else
+              log_action "updating $skill_name (no ref tracked) ..."
+            fi
+            rm -rf "$SKILL_DIR"
           else
             log_action "installing $skill_name ..."
-            SKILL_OUTPUT=$(python3 "$SKILL_INSTALLER" \
-              --repo openai/skills \
-              --path "skills/.curated/$skill_name" 2>&1) && SKILL_EXIT=0 || SKILL_EXIT=$?
-            if [ $SKILL_EXIT -eq 0 ]; then
-              log_ok "installed $skill_name"
-            else
-              echo "$SKILL_OUTPUT" | sed 's/^/    /'
-              log_warn "Failed to install $skill_name"
-            fi
+          fi
+
+          SKILL_OUTPUT=$(python3 "$SKILL_INSTALLER" \
+            --repo openai/skills \
+            --path "skills/.curated/$skill_name" 2>&1) && SKILL_EXIT=0 || SKILL_EXIT=$?
+          if [ $SKILL_EXIT -eq 0 ]; then
+            log_ok "installed $skill_name"
+            [ -n "$OPENAI_SKILLS_SHA" ] && write_installed_ref "$SKILL_DIR" "$OPENAI_SKILLS_SHA"
+          else
+            echo "$SKILL_OUTPUT" | sed 's/^/    /'
+            log_warn "Failed to install $skill_name"
           fi
         done < "$SKILLS_FILE"
       else
@@ -568,23 +601,44 @@ PYEOF
         EXT_REPO=$(jq -r ".[$i].repo" "$EXTERNAL_SKILLS_FILE")
         EXT_REF=$(jq -r ".[$i].ref // \"main\"" "$EXTERNAL_SKILLS_FILE")
 
+        REMOTE_SHA=$(get_remote_sha "$EXT_REPO" "$EXT_REF")
+        [ -z "$REMOTE_SHA" ] && log_warn "Could not fetch remote ref for $EXT_REPO — skipping update check"
+
         while IFS= read -r skill_path; do
           skill_name="$(basename "$skill_path")"
-          if [ -d "$CODEX_DIR/skills/$skill_name" ]; then
-            log_ok "$skill_name (already installed from $EXT_REPO)"
+          SKILL_DIR="$CODEX_DIR/skills/$skill_name"
+
+          if [ -d "$SKILL_DIR" ]; then
+            INSTALLED_SHA="$(read_installed_ref "$SKILL_DIR")"
+            if [ -z "$REMOTE_SHA" ]; then
+              log_ok "$skill_name (already installed from $EXT_REPO)"
+              continue
+            fi
+            if [ "$INSTALLED_SHA" = "$REMOTE_SHA" ]; then
+              log_ok "$skill_name (up to date)"
+              continue
+            fi
+            if [ -n "$INSTALLED_SHA" ]; then
+              log_action "updating $skill_name (${INSTALLED_SHA:0:7} → ${REMOTE_SHA:0:7}) ..."
+            else
+              log_action "updating $skill_name (no ref tracked) ..."
+            fi
+            rm -rf "$SKILL_DIR"
           else
             log_action "installing $skill_name from $EXT_REPO ..."
-            SKILL_OUTPUT=$(python3 "$SKILL_INSTALLER" \
-              --repo "$EXT_REPO" \
-              --ref "$EXT_REF" \
-              --path "$skill_path" \
-              --name "$skill_name" 2>&1) && SKILL_EXIT=0 || SKILL_EXIT=$?
-            if [ $SKILL_EXIT -eq 0 ]; then
-              log_ok "installed $skill_name"
-            else
-              echo "$SKILL_OUTPUT" | sed 's/^/    /'
-              log_warn "Failed to install $skill_name from $EXT_REPO"
-            fi
+          fi
+
+          SKILL_OUTPUT=$(python3 "$SKILL_INSTALLER" \
+            --repo "$EXT_REPO" \
+            --ref "$EXT_REF" \
+            --path "$skill_path" \
+            --name "$skill_name" 2>&1) && SKILL_EXIT=0 || SKILL_EXIT=$?
+          if [ $SKILL_EXIT -eq 0 ]; then
+            log_ok "installed $skill_name"
+            [ -n "$REMOTE_SHA" ] && write_installed_ref "$SKILL_DIR" "$REMOTE_SHA"
+          else
+            echo "$SKILL_OUTPUT" | sed 's/^/    /'
+            log_warn "Failed to install $skill_name from $EXT_REPO"
           fi
         done < <(jq -r ".[$i].paths[]" "$EXTERNAL_SKILLS_FILE")
       done
