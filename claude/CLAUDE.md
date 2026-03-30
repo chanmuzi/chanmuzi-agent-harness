@@ -21,6 +21,7 @@ Use `/commit`, `/pr`, `/pr release`, `/review` skills for all git operations.
 These skills handle conventions and approval steps internally — invoke them directly.
 When starting work in a git project, check if the current branch is up to date with the remote.
 If behind, inform the user and suggest an appropriate action (pull, rebase, or proceed as-is).
+Never squash merge — preserve commit history. Only exception is when the user explicitly requests it.
 
 ### Task Continuity
 When a task involves multiple logical steps, don't stop after one step.
