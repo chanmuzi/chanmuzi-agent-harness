@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="180" viewBox="0 0 640 180">
+  <!-- Background: Anthropic dark (#141413) — flat, matte, no gradient -->
+  <rect width="640" height="180" rx="10" fill="#141413"/>
+
+  <!-- Subtle top border line (light gray, very muted) -->
+  <line x1="0" y1="0.5" x2="640" y2="0.5" stroke="#b0aea5" stroke-width="0.5" opacity="0.15"/>
+
+  <!-- Motion trail dots (Claude moving forward, muted) -->
+  <circle cx="32" cy="72" r="1.5" fill="#d97757" opacity="0.1"/>
+  <circle cx="40" cy="72" r="2" fill="#d97757" opacity="0.18"/>
+  <circle cx="50" cy="72" r="2.5" fill="#d97757" opacity="0.3"/>
+
+  <!-- Main: >_ prompt — Anthropic orange #d97757 -->
+  <text x="62" y="85" fill="#d97757" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="48" font-weight="700">&gt;_</text>
+
+  <!-- Codex $> — Anthropic green #788c5d, small, tucked right, slightly elevated -->
+  <text x="530" y="68" fill="#788c5d" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="18" opacity="0.5">$&gt;</text>
+
+  <!-- Codex bounce trail (minimal, just two dots) -->
+  <circle cx="540" cy="76" r="1" fill="#788c5d" opacity="0.15"/>
+  <circle cx="543" cy="80" r="0.7" fill="#788c5d" opacity="0.08"/>
+
+  <!-- Repo name — Anthropic light #faf9f5 -->
+  <text x="62" y="125" fill="#faf9f5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="19" letter-spacing="0.3">chanmuzi-agent-harness</text>
+
+  <!-- Tagline — Anthropic mid gray #b0aea5 -->
+  <text x="62" y="150" fill="#b0aea5" font-family="ui-monospace,'Cascadia Code','Source Code Pro',Menlo,Consolas,monospace" font-size="11">Claude Code + Codex CLI 통합 설정 관리</text>
+</svg>
