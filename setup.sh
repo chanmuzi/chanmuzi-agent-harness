@@ -743,6 +743,25 @@ if [ "$INSTALL_CLAUDE" = true ] || [ "$INSTALL_CODEX" = true ]; then
 fi
 
 # ══════════════════════════════════════════
+# GLOBAL GITIGNORE (AI tool runtime dirs)
+# ══════════════════════════════════════════
+log_section "[Git] Global gitignore..."
+
+GLOBAL_GITIGNORE="${XDG_CONFIG_HOME:-$HOME/.config}/git/ignore"
+mkdir -p "$(dirname "$GLOBAL_GITIGNORE")"
+touch "$GLOBAL_GITIGNORE"
+
+for pattern in ".omc/" ".omx/"; do
+  if grep -qxF "$pattern" "$GLOBAL_GITIGNORE"; then
+    log_skip "$pattern already in global gitignore"
+  else
+    echo "$pattern" >> "$GLOBAL_GITIGNORE"
+    log_ok "added $pattern to global gitignore"
+  fi
+done
+echo ""
+
+# ══════════════════════════════════════════
 # SHELL FUNCTIONS (.zshrc / .bashrc)
 # ══════════════════════════════════════════
 log_section "[Shell] Configuring rc file..."
