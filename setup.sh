@@ -785,6 +785,8 @@ export CHANMUZI_AGENT_HARNESS_HOME=\"$REPO_DIR\"
 [ -f \"\$CHANMUZI_AGENT_HARNESS_HOME/shared/shell/init.sh\" ] && . \"\$CHANMUZI_AGENT_HARNESS_HOME/shared/shell/init.sh\"
 $NEW_MARKER_END"
 
+RC_CHANGED=false
+
 if [ -n "$RC_FILE" ]; then
   touch "$RC_FILE"
 
@@ -792,21 +794,36 @@ if [ -n "$RC_FILE" ]; then
   if grep -qF "$OLD_MARKER_BEGIN" "$RC_FILE" 2>/dev/null; then
     sed_inplace "/$OLD_MARKER_BEGIN/,/$OLD_MARKER_END/d" "$RC_FILE"
     log_ok "removed old claude-config block"
+    RC_CHANGED=true
   fi
 
   # Remove old source line if present
-  sed_inplace '/^# Claude Code config$/d; \|source.*shell/claude\.sh|d' "$RC_FILE" 2>/dev/null || true
-
-  # Remove existing harness block (for re-runs)
-  if grep -qF "$NEW_MARKER_BEGIN" "$RC_FILE" 2>/dev/null; then
-    sed_inplace "/$NEW_MARKER_BEGIN/,/$NEW_MARKER_END/d" "$RC_FILE"
+  if grep -qE '^# Claude Code config$|source.*shell/claude\.sh' "$RC_FILE" 2>/dev/null; then
+    sed_inplace '/^# Claude Code config$/d; \|source.*shell/claude\.sh|d' "$RC_FILE" 2>/dev/null || true
+    RC_CHANGED=true
   fi
 
-  # Clean trailing blank lines and append new block
-  perl -i -0777pe 's/\n+$/\n/' "$RC_FILE"
-  echo "" >> "$RC_FILE"
-  echo "$NEW_BLOCK" >> "$RC_FILE"
-  log_ok "shell functions written to $RC_FILE"
+  # Extract existing block content for comparison
+  EXISTING_BLOCK=""
+  if grep -qF "$NEW_MARKER_BEGIN" "$RC_FILE" 2>/dev/null; then
+    EXISTING_BLOCK=$(sed -n "/$NEW_MARKER_BEGIN/,/$NEW_MARKER_END/p" "$RC_FILE")
+  fi
+
+  if [ "$EXISTING_BLOCK" = "$NEW_BLOCK" ]; then
+    log_ok "shell functions already up to date in $RC_FILE"
+  else
+    # Remove existing harness block (for re-runs)
+    if grep -qF "$NEW_MARKER_BEGIN" "$RC_FILE" 2>/dev/null; then
+      sed_inplace "/$NEW_MARKER_BEGIN/,/$NEW_MARKER_END/d" "$RC_FILE"
+    fi
+
+    # Clean trailing blank lines and append new block
+    perl -i -0777pe 's/\n+$/\n/' "$RC_FILE"
+    echo "" >> "$RC_FILE"
+    echo "$NEW_BLOCK" >> "$RC_FILE"
+    log_ok "shell functions written to $RC_FILE"
+    RC_CHANGED=true
+  fi
 else
   log_warn "Could not detect shell. Add manually:"
   echo ""
@@ -905,7 +922,6 @@ if command -v omx &>/dev/null; then
   echo ""
 fi
 
-# Do NOT auto-reload the shell here:
-#   - exec $SHELL breaks terminal integrations (Warp, iTerm2 shell integration)
-#   - source $RC_FILE fails when the script runs in bash but RC_FILE is zshrc
-echo -e "${DIM}Run 'source ${RC_FILE:-~/.zshrc}' or open a new terminal to apply changes.${NC}"
+if [ "$RC_CHANGED" = true ]; then
+  echo -e "${DIM}Run 'source ${RC_FILE:-~/.zshrc}' or open a new terminal to apply changes.${NC}"
+fi
