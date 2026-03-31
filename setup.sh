@@ -905,10 +905,7 @@ if command -v omx &>/dev/null; then
   echo ""
 fi
 
-# Reload shell to apply changes
-echo -e "${DIM}Reloading shell...${NC}"
-if [ -t 0 ] && [ -t 1 ]; then
-  exec "$SHELL" -l
-else
-  log_info "Non-interactive shell detected. Run 'source ${RC_FILE:-~/.zshrc}' or open a new shell."
-fi
+# Do NOT auto-reload the shell here:
+#   - exec $SHELL breaks terminal integrations (Warp, iTerm2 shell integration)
+#   - source $RC_FILE fails when the script runs in bash but RC_FILE is zshrc
+echo -e "${DIM}Run 'source ${RC_FILE:-~/.zshrc}' or open a new terminal to apply changes.${NC}"
