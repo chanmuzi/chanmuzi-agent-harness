@@ -93,7 +93,8 @@
     "git-conventions@git-conventions": true,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false,
     "frontend-design@claude-plugins-official": false,
-    "playwright@claude-plugins-official": false
+    "playwright@claude-plugins-official": false,
+    "codex@openai-codex": true
   },
   "extraKnownMarketplaces": {
     "omc": {
@@ -112,6 +113,12 @@
       "source": {
         "source": "github",
         "repo": "nextlevelbuilder/ui-ux-pro-max-skill"
+      }
+    },
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
       }
     }
   },
