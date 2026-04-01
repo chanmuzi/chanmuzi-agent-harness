@@ -109,6 +109,35 @@ for cmd in "$REPO_DIR"/claude/commands/*.md; do
   name="$(basename "$cmd")"
   check_symlink "$CLAUDE_DIR/commands/$name" "$cmd" "commands/$name"
 done
+
+# extraKnownMarketplaces path residue check
+SETTINGS_FILE="$REPO_DIR/claude/settings.json"
+if [ -f "$SETTINGS_FILE" ] && command -v jq &>/dev/null; then
+  MP_ISSUES=$(jq -r '
+    .extraKnownMarketplaces // {} | to_entries[] |
+    select(.value.source.path != null) |
+    if .value.source.repo != null then
+      "error:" + .key
+    else
+      "warn:" + .key
+    end
+  ' "$SETTINGS_FILE" 2>/dev/null || true)
+
+  if [ -z "$MP_ISSUES" ]; then
+    log_ok "marketplace entries: no path residue"
+  else
+    while IFS=: read -r level mp_name; do
+      [ -z "$level" ] && continue
+      if [ "$level" = "error" ]; then
+        log_error "marketplace $mp_name: path + repo conflict (remove path from settings.json)"
+        ERRORS=$((ERRORS + 1))
+      else
+        log_warn "marketplace $mp_name: local path set (intentional?)"
+        WARNINGS=$((WARNINGS + 1))
+      fi
+    done <<< "$MP_ISSUES"
+  fi
+fi
 echo ""
 
 # ══════════════════════════════════════════
