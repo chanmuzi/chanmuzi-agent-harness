@@ -114,16 +114,21 @@ done
 SETTINGS_FILE="$REPO_DIR/claude/settings.json"
 if [ -f "$SETTINGS_FILE" ] && command -v jq &>/dev/null; then
   MP_ISSUES=$(jq -r '
-    .extraKnownMarketplaces // {} | to_entries[] |
-    select(.value.source.path != null) |
-    if .value.source.repo != null then
-      "error:" + .key
+    (.extraKnownMarketplaces // {}) | to_entries[] |
+    . as $entry |
+    ($entry.value.source? // {}) as $src |
+    select($src.path? != null) |
+    if $src.repo? != null then
+      "error:" + ($entry.key // "")
     else
-      "warn:" + .key
+      "warn:" + ($entry.key // "")
     end
-  ' "$SETTINGS_FILE" 2>/dev/null || true)
+  ' "$SETTINGS_FILE" 2>/dev/null)
 
-  if [ -z "$MP_ISSUES" ]; then
+  if [ $? -ne 0 ]; then
+    log_error "marketplace entries: failed to parse settings.json"
+    ERRORS=$((ERRORS + 1))
+  elif [ -z "$MP_ISSUES" ]; then
     log_ok "marketplace entries: no path residue"
   else
     while IFS=: read -r level mp_name; do
