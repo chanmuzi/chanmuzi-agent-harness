@@ -1,7 +1,8 @@
 {
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "OMC_SKIP_HOOKS": "keyword-detector"
+    "OMC_SKIP_HOOKS": "keyword-detector",
+    "CLAUDE_CODE_NO_FLICKER": "1"
   },
   "permissions": {
     "allow": [
@@ -123,7 +124,6 @@
     }
   },
   "language": "Korean",
-  "effortLevel": "high",
   "voiceEnabled": false,
   "skipDangerousModePermissionPrompt": true
 }
