@@ -91,7 +91,7 @@
   },
   "enabledPlugins": {
     "oh-my-claudecode@omc": true,
-    "git-conventions@git-conventions": true,
+    "git-claw@git-claw": true,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false,
     "frontend-design@claude-plugins-official": false,
     "playwright@claude-plugins-official": false,
@@ -104,10 +104,10 @@
         "repo": "Yeachan-Heo/oh-my-claudecode"
       }
     },
-    "git-conventions": {
+    "git-claw": {
       "source": {
         "source": "github",
-        "repo": "chanmuzi/git-conventions"
+        "repo": "chanmuzi/git-claw"
       }
     },
     "ui-ux-pro-max-skill": {
