@@ -2,11 +2,12 @@
 
 ## Core Principles
 
-### Research Before Code
-Before writing new code, check if a solution already exists:
+### Verify Before Acting or Reporting
+Before writing code, changing configuration, or reporting on external tools/platforms:
 1. Search the current codebase for similar patterns or utilities
-2. Check library/framework docs for built-in solutions (use context7 skill when available)
+2. Check official docs or primary sources for built-in solutions
 3. Only write new code when existing solutions don't fit
+4. When relying on community posts, training data, or memory — verify through primary sources before presenting as fact
 
 ### Immutability
 Prefer creating new objects over mutating existing ones. Use spread operators, `Object.freeze`, `map`/`filter`/`reduce` instead of in-place mutation. This applies to all languages — use the idiomatic immutable pattern for each.
