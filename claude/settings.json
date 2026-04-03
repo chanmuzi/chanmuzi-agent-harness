@@ -71,13 +71,12 @@
         ]
       }
     ],
-    "Notification": [
+    "PermissionRequest": [
       {
-        "matcher": "permission_prompt|elicitation_dialog",
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"$(uname)\" = \"Darwin\" ]; then afplay -v 0.2 /System/Library/Sounds/Morse.aiff; else printf '\\a'; fi",
+            "command": "bash ~/.claude/hooks/notification-sound.sh",
             "timeout": 3
           }
         ]
@@ -123,9 +122,9 @@
       }
     }
   },
-  "autoMemoryEnabled": false,
   "language": "Korean",
+  "effortLevel": "high",
   "voiceEnabled": false,
-  "skipDangerousModePermissionPrompt": true,
-  "effortLevel": "high"
+  "autoMemoryEnabled": false,
+  "skipDangerousModePermissionPrompt": true
 }
