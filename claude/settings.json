@@ -122,6 +122,11 @@
       }
     }
   },
+  "omc": {
+    "deepDive": {
+      "ambiguityThreshold": 0.1
+    }
+  },
   "language": "Korean",
   "effortLevel": "high",
   "voiceEnabled": false,
