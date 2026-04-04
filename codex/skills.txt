@@ -2,6 +2,5 @@
 # One skill name per line (from openai/skills curated list)
 # Lines starting with # are ignored
 # Note: context7 is installed separately via ~/.agents/skills symlink
-playwright
 pdf
 jupyter-notebook
