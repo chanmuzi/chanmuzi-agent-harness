@@ -15,11 +15,27 @@ Prefer creating new objects over mutating existing ones. Use spread operators, `
 ### Small, Focused Files
 Each file should have a single clear purpose. If a file handles multiple distinct responsibilities, split by responsibility.
 
+### Error Handling Integrity
+When encountering errors or failures, never bypass or hide them. Fixing the root cause is always the top priority.
+
+**Never:**
+- Suppress or ignore an error without fixing its cause
+- Bypass failing tests by marking them as skipped, pending, or "known issue"
+- Downplay failures or report them as successes
+- Substitute a workaround without the user's explicit approval
+
+**Always:**
+1. Identify and fix the root cause of the error
+2. If the issue persists after reasonable attempts, stop immediately and report to the user — what failed, what was tried, and why it remains unresolved
+3. Verify actual behavior before reporting completion — static code-level checks alone do not count as "done"
+4. Report verification results as-is — state both successes and failures explicitly
+
 ## Workflow
 
 ### Git
 Use `/commit`, `/pr`, `/pr release`, `/review` skills for all git operations.
 These skills handle conventions and approval steps internally — invoke them directly.
+For compound requests (e.g., "commit and create PR"), invoke each corresponding skill separately and sequentially — never skip a skill by handling the operation directly.
 When starting work in a git project, check if the current branch is up to date with the remote.
 If behind, inform the user and suggest an appropriate action (pull, rebase, or proceed as-is).
 Never squash merge — preserve commit history. Only exception is when the user explicitly requests it.
