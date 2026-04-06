@@ -93,7 +93,6 @@
     "git-claw@git-claw": true,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false,
     "frontend-design@claude-plugins-official": false,
-    "playwright@claude-plugins-official": false,
     "codex@openai-codex": true
   },
   "extraKnownMarketplaces": {
@@ -122,14 +121,13 @@
       }
     }
   },
+  "language": "Korean",
+  "voiceEnabled": false,
+  "autoMemoryEnabled": false,
+  "skipDangerousModePermissionPrompt": true,
   "omc": {
     "deepDive": {
       "ambiguityThreshold": 0.1
     }
-  },
-  "language": "Korean",
-  "effortLevel": "high",
-  "voiceEnabled": false,
-  "autoMemoryEnabled": false,
-  "skipDangerousModePermissionPrompt": true
+  }
 }
