@@ -24,19 +24,20 @@ def render(target_name: str, body: str) -> str:
 
 def main() -> int:
     check_only = "--check" in sys.argv[1:]
-    body = SOURCE.read_text()
+    body = SOURCE.read_text(encoding="utf-8")
     failed = False
 
     for target_name in ("CLAUDE.md", "AGENTS.md"):
-      target = REPO_DIR / target_name
-      rendered = render(target_name, body)
-      if check_only:
-          if not target.exists() or target.read_text() != rendered:
-              print(f"out_of_sync:{target_name}")
-              failed = True
-      else:
-          target.write_text(rendered)
-          print(f"rendered:{target_name}")
+        target = REPO_DIR / target_name
+        rendered = render(target_name, body)
+        if check_only:
+            if not target.exists() or target.read_text(encoding="utf-8") != rendered:
+                print(f"out_of_sync:{target_name}")
+                failed = True
+        else:
+            with target.open("w", encoding="utf-8", newline="\n") as handle:
+                handle.write(rendered)
+            print(f"rendered:{target_name}")
 
     return 1 if failed else 0
 

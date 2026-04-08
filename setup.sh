@@ -330,24 +330,10 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
     DECLARED_MARKETPLACES=$(printf '%s\n' "$MARKETPLACE_NAMES" | awk '{print $1}')
     REGISTERED_MARKETPLACE_NAMES=$(printf '%s\n' "$REGISTERED_MARKETPLACES" | sed -n 's/^[[:space:]]*❯[[:space:]]*//p')
 
-    while IFS= read -r registered_name; do
-      [ -z "$registered_name" ] && continue
-      if ! printf '%s\n' "$DECLARED_MARKETPLACES" | grep -qxF "$registered_name"; then
-        log_remove "marketplace: $registered_name ..."
-        REMOVE_OUTPUT=$(claude plugin marketplace remove "$registered_name" 2>&1) && REMOVE_EXIT=0 || REMOVE_EXIT=$?
-        if [ $REMOVE_EXIT -eq 0 ]; then
-          log_remove "removed marketplace $registered_name"
-        else
-          echo "$REMOVE_OUTPUT" | sed 's/^/    /'
-          log_warn "Failed to remove marketplace $registered_name"
-        fi
-      fi
-    done <<< "$REGISTERED_MARKETPLACE_NAMES"
-
-    if [ -d "$MARKETPLACE_DIR" ]; then
-      for registered_dir in "$MARKETPLACE_DIR"/*; do
-        [ -d "$registered_dir" ] || continue
-        registered_name="$(basename "$registered_dir")"
+    if [ -z "$DECLARED_MARKETPLACES" ] && [ -n "$REGISTERED_MARKETPLACE_NAMES" ]; then
+      log_warn "marketplace declaration parsing returned empty — skipping marketplace removal"
+    else
+      while IFS= read -r registered_name; do
         [ -z "$registered_name" ] && continue
         if ! printf '%s\n' "$DECLARED_MARKETPLACES" | grep -qxF "$registered_name"; then
           log_remove "marketplace: $registered_name ..."
@@ -359,7 +345,25 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
             log_warn "Failed to remove marketplace $registered_name"
           fi
         fi
-      done
+      done <<< "$REGISTERED_MARKETPLACE_NAMES"
+
+      if [ -d "$MARKETPLACE_DIR" ]; then
+        for registered_dir in "$MARKETPLACE_DIR"/*; do
+          [ -d "$registered_dir" ] || continue
+          registered_name="$(basename "$registered_dir")"
+          [ -z "$registered_name" ] && continue
+          if ! printf '%s\n' "$DECLARED_MARKETPLACES" | grep -qxF "$registered_name"; then
+            log_remove "marketplace: $registered_name ..."
+            REMOVE_OUTPUT=$(claude plugin marketplace remove "$registered_name" 2>&1) && REMOVE_EXIT=0 || REMOVE_EXIT=$?
+            if [ $REMOVE_EXIT -eq 0 ]; then
+              log_remove "removed marketplace $registered_name"
+            else
+              echo "$REMOVE_OUTPUT" | sed 's/^/    /'
+              log_warn "Failed to remove marketplace $registered_name"
+            fi
+          fi
+        done
+      fi
     fi
 
     # Pull latest for marketplace clones
@@ -552,46 +556,91 @@ codex_hooks = true' "$CONFIG_TOML"
 
   # 4. Ensure the managed top-level notify exists exactly once.
   NOTIFY_STATUS=$(python3 - "$CONFIG_TOML" <<'PYEOF'
+import ast
+import re
 import sys
 
 path = sys.argv[1]
-managed = 'notify = ["bash", "-lc", "~/.codex/hooks/codex-turn-complete-sound.sh"]'
-lines = open(path).read().splitlines(True)
+managed_value = ["bash", "-lc", "~/.codex/hooks/codex-turn-complete-sound.sh"]
+managed_line = 'notify = ["bash", "-lc", "~/.codex/hooks/codex-turn-complete-sound.sh"]\n'
+lines = open(path, encoding="utf-8").read().splitlines(True)
 out = []
 in_section = False
-seen = False
+managed_seen = False
+other_notify_removed = False
+duplicate_removed = False
+i = 0
 
-for line in lines:
+while i < len(lines):
+    line = lines[i]
     stripped = line.strip()
-    if stripped.startswith('['):
-        in_section = True
-    if not in_section and stripped == managed:
-        if seen:
-            continue
-        seen = True
-    out.append(line)
 
-if not seen:
+    if stripped.startswith("["):
+        in_section = True
+        out.append(line)
+        i += 1
+        continue
+
+    if in_section or not re.match(r"^notify\s*=", stripped):
+        out.append(line)
+        i += 1
+        continue
+
+    block = [line]
+    balance = line.count("[") - line.count("]")
+    i += 1
+    while i < len(lines) and balance > 0:
+        block.append(lines[i])
+        balance += lines[i].count("[") - lines[i].count("]")
+        i += 1
+
+    candidate = "".join(block)
+    candidate = re.sub(r"#.*", "", candidate)
+    candidate = re.sub(r"^\s*notify\s*=\s*", "", candidate, count=1)
+    try:
+        parsed = ast.literal_eval(candidate.strip())
+    except Exception:
+        parsed = None
+
+    if parsed == managed_value and not managed_seen:
+        out.append(managed_line)
+        managed_seen = True
+    elif parsed == managed_value:
+        duplicate_removed = True
+    else:
+        other_notify_removed = True
+
+if not managed_seen:
     inserted = False
-    for idx, line in enumerate(out):
-        if line.strip().startswith('['):
-            out.insert(idx, managed + '\n')
+    for idx, existing in enumerate(out):
+        if existing.strip().startswith("["):
+            out.insert(idx, managed_line)
             inserted = True
             break
     if not inserted:
         if out and out[-1].strip():
-            out.append('\n')
-        out.append(managed + '\n')
-    status = "added"
-else:
-    status = "already"
+            out.append("\n")
+        out.append(managed_line)
 
-open(path, 'w').writelines(out)
+if other_notify_removed:
+    status = "updated"
+elif duplicate_removed:
+    status = "deduped"
+elif managed_seen:
+    status = "already"
+else:
+    status = "added"
+
+open(path, 'w', encoding="utf-8").writelines(out)
 print(status)
 PYEOF
 )
   if [ "$NOTIFY_STATUS" = "added" ]; then
     log_ok "added top-level notify for harness sound hook"
+  elif [ "$NOTIFY_STATUS" = "updated" ]; then
+    log_ok "replaced top-level notify with harness sound hook"
+  elif [ "$NOTIFY_STATUS" = "deduped" ]; then
+    log_ok "deduplicated top-level notify for harness sound hook"
   else
     log_ok "top-level notify for harness sound hook already configured"
   fi

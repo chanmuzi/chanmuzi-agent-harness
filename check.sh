@@ -171,8 +171,26 @@ echo ""
 # project doc sync check
 PROJECT_DOC_RENDERER="$REPO_DIR/shared/render_project_docs.py"
 if [ -f "$PROJECT_DOC_RENDERER" ]; then
-  PROJECT_DOC_CHECK_OUTPUT="$(python3 "$PROJECT_DOC_RENDERER" --check 2>/dev/null || true)"
-  if [ -z "$PROJECT_DOC_CHECK_OUTPUT" ]; then
+  PROJECT_DOC_STDOUT_FILE="$(mktemp)"
+  PROJECT_DOC_STDERR_FILE="$(mktemp)"
+  if python3 "$PROJECT_DOC_RENDERER" --check >"$PROJECT_DOC_STDOUT_FILE" 2>"$PROJECT_DOC_STDERR_FILE"; then
+    PROJECT_DOC_RENDER_STATUS=0
+  else
+    PROJECT_DOC_RENDER_STATUS=$?
+  fi
+  PROJECT_DOC_CHECK_OUTPUT="$(cat "$PROJECT_DOC_STDOUT_FILE")"
+  PROJECT_DOC_CHECK_STDERR="$(cat "$PROJECT_DOC_STDERR_FILE")"
+  rm -f "$PROJECT_DOC_STDOUT_FILE" "$PROJECT_DOC_STDERR_FILE"
+
+  if [ "$PROJECT_DOC_RENDER_STATUS" -ne 0 ]; then
+    log_warn "project doc renderer failed: shared/render_project_docs.py --check"
+    WARNINGS=$((WARNINGS + 1))
+    while IFS= read -r line; do
+      [ -z "$line" ] && continue
+      log_warn "project doc renderer stderr: $line"
+      WARNINGS=$((WARNINGS + 1))
+    done <<< "$PROJECT_DOC_CHECK_STDERR"
+  elif [ -z "$PROJECT_DOC_CHECK_OUTPUT" ]; then
     log_ok "project docs: CLAUDE.md and AGENTS.md are synchronized"
   else
     while IFS= read -r line; do
@@ -247,18 +265,76 @@ if [ -f "$CONFIG_TOML" ]; then
   fi
 
   TOP_LEVEL_NOTIFY_COUNT=$(python3 - "$CONFIG_TOML" <<'PYEOF'
+import ast
+import re
 import sys
 
 path = sys.argv[1]
-managed = 'notify = ["bash", "-lc", "~/.codex/hooks/codex-turn-complete-sound.sh"]'
+managed = ["bash", "-lc", "~/.codex/hooks/codex-turn-complete-sound.sh"]
+text = open(path, encoding="utf-8").read().splitlines()
 count = 0
 in_section = False
+collecting = False
+buffer = []
+balance = 0
 
-for raw_line in open(path):
+for raw_line in text:
     stripped = raw_line.strip()
-    if stripped.startswith('['):
+
+    if collecting:
+        buffer.append(raw_line)
+        balance += raw_line.count("[") - raw_line.count("]")
+        if balance > 0:
+            continue
+
+        candidate = "\n".join(buffer)
+        candidate = re.sub(r"#.*", "", candidate)
+        candidate = re.sub(r"^\s*notify\s*=\s*", "", candidate, count=1)
+        try:
+            parsed = ast.literal_eval(candidate.strip())
+        except Exception:
+            parsed = None
+        if parsed == managed:
+            count += 1
+        collecting = False
+        buffer = []
+        balance = 0
+        continue
+
+    if not stripped or stripped.startswith("#"):
+        continue
+    if stripped.startswith("["):
         in_section = True
-    if not in_section and stripped == managed:
+        continue
+    if in_section or not re.match(r"^notify\s*=", stripped):
+        continue
+
+    collecting = True
+    buffer = [raw_line]
+    balance = raw_line.count("[") - raw_line.count("]")
+    if balance <= 0:
+        candidate = "\n".join(buffer)
+        candidate = re.sub(r"#.*", "", candidate)
+        candidate = re.sub(r"^\s*notify\s*=\s*", "", candidate, count=1)
+        try:
+            parsed = ast.literal_eval(candidate.strip())
+        except Exception:
+            parsed = None
+        if parsed == managed:
+            count += 1
+        collecting = False
+        buffer = []
+        balance = 0
+
+if collecting:
+    candidate = "\n".join(buffer)
+    candidate = re.sub(r"#.*", "", candidate)
+    candidate = re.sub(r"^\s*notify\s*=\s*", "", candidate, count=1)
+    try:
+        parsed = ast.literal_eval(candidate.strip())
+    except Exception:
+        parsed = None
+    if parsed == managed:
         count += 1
 
 print(count)

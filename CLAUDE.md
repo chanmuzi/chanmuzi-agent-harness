@@ -28,7 +28,8 @@ Claude Code and Codex may enter through different filenames, but they should rec
 - Guard Linux-only commands with `[ "$(uname -s)" = "Linux" ]`
 - Claude config is fully symlink-managed from `claude/`
 - Codex config is split between symlink-managed files in `codex/` and patch-only updates to `~/.codex/config.toml`
-- Do not overwrite unrelated Codex machine state such as `projects.*`, unmanaged `mcp_servers.*`, or unrelated `plugins.*`
+- This harness fully manages Codex `mcp_servers.*` state based on `codex/mcp-servers.json` and may prune undeclared entries during setup
+- Do not overwrite unrelated Codex machine state such as `projects.*` or unrelated `plugins.*`
 - Keep this repo portable: never hardcode usernames or machine-specific absolute paths when a variable such as `$HOME` or `$REPO_DIR` can be used
 
 ## Project Doc Policy
