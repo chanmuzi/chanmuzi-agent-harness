@@ -57,7 +57,8 @@ play_sound() {
   elif [ -n "$sound_file" ] && [ -f "$sound_file" ] && command -v aplay &>/dev/null; then
     aplay "$sound_file" 2>/dev/null || true
   else
-    printf '\a'
+    # Hooks may require structured stdout, so emit the terminal bell on stderr.
+    printf '\a' >&2
   fi
 
   return 0

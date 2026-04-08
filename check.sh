@@ -143,6 +143,67 @@ if [ -f "$SETTINGS_FILE" ] && command -v jq &>/dev/null; then
     done <<< "$MP_ISSUES"
   fi
 fi
+
+if [ -f "$SETTINGS_FILE" ] && command -v jq &>/dev/null && command -v claude >/dev/null 2>&1; then
+  DECLARED_MARKETPLACES="$(jq -r '(.extraKnownMarketplaces // {}) | keys[]' "$SETTINGS_FILE" 2>/dev/null || true)"
+  CONFIGURED_MARKETPLACES="$(claude plugin marketplace list 2>/dev/null | sed -n 's/^[[:space:]]*❯[[:space:]]*//p')"
+  STALE_MARKETPLACES=""
+
+  while IFS= read -r mp_name; do
+    [ -z "$mp_name" ] && continue
+    if ! printf '%s\n' "$DECLARED_MARKETPLACES" | grep -qxF "$mp_name"; then
+      STALE_MARKETPLACES="${STALE_MARKETPLACES}${mp_name}\n"
+    fi
+  done <<< "$CONFIGURED_MARKETPLACES"
+
+  if [ -z "$STALE_MARKETPLACES" ]; then
+    log_ok "marketplaces: no undeclared registrations"
+  else
+    while IFS= read -r mp_name; do
+      [ -z "$mp_name" ] && continue
+      log_warn "marketplace $mp_name: registered but not declared in claude/settings.json"
+      WARNINGS=$((WARNINGS + 1))
+    done <<< "$(printf '%b' "$STALE_MARKETPLACES")"
+  fi
+fi
+echo ""
+
+# project doc sync check
+PROJECT_DOC_RENDERER="$REPO_DIR/shared/render_project_docs.py"
+if [ -f "$PROJECT_DOC_RENDERER" ]; then
+  PROJECT_DOC_STDOUT_FILE="$(mktemp)"
+  PROJECT_DOC_STDERR_FILE="$(mktemp)"
+  if python3 "$PROJECT_DOC_RENDERER" --check >"$PROJECT_DOC_STDOUT_FILE" 2>"$PROJECT_DOC_STDERR_FILE"; then
+    PROJECT_DOC_RENDER_STATUS=0
+  else
+    PROJECT_DOC_RENDER_STATUS=$?
+  fi
+  PROJECT_DOC_CHECK_OUTPUT="$(cat "$PROJECT_DOC_STDOUT_FILE")"
+  PROJECT_DOC_CHECK_STDERR="$(cat "$PROJECT_DOC_STDERR_FILE")"
+  rm -f "$PROJECT_DOC_STDOUT_FILE" "$PROJECT_DOC_STDERR_FILE"
+
+  if [ "$PROJECT_DOC_RENDER_STATUS" -ne 0 ]; then
+    log_warn "project doc renderer failed: shared/render_project_docs.py --check"
+    WARNINGS=$((WARNINGS + 1))
+    while IFS= read -r line; do
+      [ -z "$line" ] && continue
+      log_warn "project doc renderer stderr: $line"
+      WARNINGS=$((WARNINGS + 1))
+    done <<< "$PROJECT_DOC_CHECK_STDERR"
+  elif [ -z "$PROJECT_DOC_CHECK_OUTPUT" ]; then
+    log_ok "project docs: CLAUDE.md and AGENTS.md are synchronized"
+  else
+    while IFS= read -r line; do
+      [ -z "$line" ] && continue
+      doc_name="${line#out_of_sync:}"
+      log_warn "project doc $doc_name is out of sync with shared/project-doc.md"
+      WARNINGS=$((WARNINGS + 1))
+    done <<< "$PROJECT_DOC_CHECK_OUTPUT"
+  fi
+else
+  log_warn "project doc renderer missing: shared/render_project_docs.py"
+  WARNINGS=$((WARNINGS + 1))
+fi
 echo ""
 
 # ══════════════════════════════════════════
@@ -167,11 +228,17 @@ else
   WARNINGS=$((WARNINGS + 1))
 fi
 
-for hook in "$REPO_DIR"/codex/hooks/*.sh; do
-  [ -f "$hook" ] || continue
-  name="$(basename "$hook")"
-  check_symlink "$CODEX_DIR/hooks/$name" "$hook" "hooks/$name"
-done
+check_symlink "$CODEX_DIR/hooks/codex-turn-complete-sound.sh" \
+  "$REPO_DIR/codex/hooks/codex-turn-complete-sound.sh" "hooks/codex-turn-complete-sound.sh"
+check_symlink "$CODEX_DIR/hooks/stop-sound.sh" \
+  "$REPO_DIR/codex/hooks/stop-sound.sh" "hooks/stop-sound.sh"
+
+if [ -e "$CODEX_DIR/hooks/block-no-verify.sh" ] || [ -L "$CODEX_DIR/hooks/block-no-verify.sh" ]; then
+  log_warn "obsolete hooks/block-no-verify.sh still present"
+  WARNINGS=$((WARNINGS + 1))
+else
+  log_ok "obsolete hooks/block-no-verify.sh absent"
+fi
 
 # config.toml checks
 CONFIG_TOML="$CODEX_DIR/config.toml"
@@ -195,6 +262,99 @@ if [ -f "$CONFIG_TOML" ]; then
   else
     log_warn "[profiles.harness] missing"
     WARNINGS=$((WARNINGS + 1))
+  fi
+
+  TOP_LEVEL_NOTIFY_COUNT=$(python3 - "$CONFIG_TOML" <<'PYEOF'
+import ast
+import re
+import sys
+
+path = sys.argv[1]
+managed = ["bash", "-lc", "~/.codex/hooks/codex-turn-complete-sound.sh"]
+text = open(path, encoding="utf-8").read().splitlines()
+count = 0
+in_section = False
+collecting = False
+buffer = []
+balance = 0
+
+for raw_line in text:
+    stripped = raw_line.strip()
+
+    if collecting:
+        buffer.append(raw_line)
+        balance += raw_line.count("[") - raw_line.count("]")
+        if balance > 0:
+            continue
+
+        candidate = "\n".join(buffer)
+        candidate = re.sub(r"#.*", "", candidate)
+        candidate = re.sub(r"^\s*notify\s*=\s*", "", candidate, count=1)
+        try:
+            parsed = ast.literal_eval(candidate.strip())
+        except Exception:
+            parsed = None
+        if parsed == managed:
+            count += 1
+        collecting = False
+        buffer = []
+        balance = 0
+        continue
+
+    if not stripped or stripped.startswith("#"):
+        continue
+    if stripped.startswith("["):
+        in_section = True
+        continue
+    if in_section or not re.match(r"^notify\s*=", stripped):
+        continue
+
+    collecting = True
+    buffer = [raw_line]
+    balance = raw_line.count("[") - raw_line.count("]")
+    if balance <= 0:
+        candidate = "\n".join(buffer)
+        candidate = re.sub(r"#.*", "", candidate)
+        candidate = re.sub(r"^\s*notify\s*=\s*", "", candidate, count=1)
+        try:
+            parsed = ast.literal_eval(candidate.strip())
+        except Exception:
+            parsed = None
+        if parsed == managed:
+            count += 1
+        collecting = False
+        buffer = []
+        balance = 0
+
+if collecting:
+    candidate = "\n".join(buffer)
+    candidate = re.sub(r"#.*", "", candidate)
+    candidate = re.sub(r"^\s*notify\s*=\s*", "", candidate, count=1)
+    try:
+        parsed = ast.literal_eval(candidate.strip())
+    except Exception:
+        parsed = None
+    if parsed == managed:
+        count += 1
+
+print(count)
+PYEOF
+)
+  if [ "$TOP_LEVEL_NOTIFY_COUNT" -eq 1 ]; then
+    log_ok "top-level managed notify configured exactly once"
+  elif [ "$TOP_LEVEL_NOTIFY_COUNT" -gt 1 ]; then
+    log_warn "top-level managed notify duplicated ($TOP_LEVEL_NOTIFY_COUNT entries)"
+    WARNINGS=$((WARNINGS + 1))
+  else
+    log_warn "top-level managed notify missing"
+    WARNINGS=$((WARNINGS + 1))
+  fi
+
+  if grep -q 'stop-sound\.sh' "$CODEX_DIR/hooks.json"; then
+    log_warn "hooks.json still references stop-sound.sh"
+    WARNINGS=$((WARNINGS + 1))
+  else
+    log_ok "hooks.json has no stop-sound.sh reference"
   fi
 
   if grep -q 'oh-my-codex (OMX) Configuration' "$CONFIG_TOML" || \
@@ -383,6 +543,39 @@ if [ -f "$CODEX_MCP_FILE" ] && command -v jq &>/dev/null; then
         fi
       fi
     done < <(jq -c '.[]' "$CODEX_MCP_FILE")
+  fi
+
+  EXISTING_MCP_NAMES="$(python3 - "$CONFIG_TOML" <<'PYEOF'
+import re
+import sys
+
+path = sys.argv[1]
+pattern = re.compile(r'^\[mcp_servers\.([^\]]+)\]\s*$')
+
+for line in open(path):
+    match = pattern.match(line.strip())
+    if match:
+        print(match.group(1))
+PYEOF
+)"
+  DECLARED_MCP_NAMES="$(jq -r '.[].name' "$CODEX_MCP_FILE" 2>/dev/null || true)"
+  STALE_MCP_NAMES=""
+
+  while IFS= read -r name; do
+    [ -z "$name" ] && continue
+    if ! printf '%s\n' "$DECLARED_MCP_NAMES" | grep -qxF "$name"; then
+      STALE_MCP_NAMES="${STALE_MCP_NAMES}${name}\n"
+    fi
+  done <<< "$EXISTING_MCP_NAMES"
+
+  if [ -z "$STALE_MCP_NAMES" ]; then
+    log_ok "mcp servers: no unmanaged entries"
+  else
+    while IFS= read -r name; do
+      [ -z "$name" ] && continue
+      log_warn "mcp server $name: present in ~/.codex/config.toml but not declared in codex/mcp-servers.json"
+      WARNINGS=$((WARNINGS + 1))
+    done <<< "$(printf '%b' "$STALE_MCP_NAMES")"
   fi
 fi
 echo ""

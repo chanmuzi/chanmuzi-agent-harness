@@ -4,4 +4,3 @@
 
 [profiles.harness]
 personality = "pragmatic"
-notify = ["bash", "-lc", "~/.codex/hooks/codex-turn-complete-sound.sh"]

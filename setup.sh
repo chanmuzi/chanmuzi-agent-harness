@@ -119,6 +119,57 @@ sync_codex_mcp_servers() {
     return 0
   fi
 
+  PRUNE_OUTPUT=$(python3 - "$config_toml" "$file" <<'PYEOF'
+import json
+import re
+import sys
+
+path, json_path = sys.argv[1], sys.argv[2]
+declared = {entry["name"] for entry in json.load(open(json_path))}
+lines = open(path).read().splitlines(True)
+out = []
+removed = []
+i = 0
+pattern = re.compile(r'^\[mcp_servers\.([^\]]+)\]\s*$')
+
+while i < len(lines):
+    line = lines[i]
+    match = pattern.match(line.strip())
+    if not match:
+        out.append(line)
+        i += 1
+        continue
+
+    name = match.group(1)
+    j = i + 1
+    while j < len(lines) and not lines[j].strip().startswith('['):
+        j += 1
+
+    if name in declared:
+        out.extend(lines[i:j])
+    else:
+        removed.append(name)
+
+    i = j
+
+open(path, "w").writelines(out)
+print("\n".join(removed))
+PYEOF
+) && PRUNE_EXIT=0 || PRUNE_EXIT=$?
+  if [ $PRUNE_EXIT -eq 0 ]; then
+    if [ -n "$PRUNE_OUTPUT" ]; then
+      while IFS= read -r stale_name; do
+        [ -z "$stale_name" ] && continue
+        log_remove "removed unmanaged MCP server: $stale_name"
+      done <<< "$PRUNE_OUTPUT"
+    else
+      log_skip "no unmanaged MCP servers to remove"
+    fi
+  else
+    echo "$PRUNE_OUTPUT" | sed 's/^/    /'
+    log_warn "Failed to prune unmanaged MCP servers"
+  fi
+
   if [ "$(jq 'length' "$file")" -eq 0 ]; then
     log_skip "no managed MCP servers declared"
     echo ""
@@ -275,12 +326,51 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
       fi
     done <<< "$MARKETPLACE_NAMES"
 
-    # Pull latest for marketplace clones
     MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces"
+    DECLARED_MARKETPLACES=$(printf '%s\n' "$MARKETPLACE_NAMES" | awk '{print $1}')
+    REGISTERED_MARKETPLACE_NAMES=$(printf '%s\n' "$REGISTERED_MARKETPLACES" | sed -n 's/^[[:space:]]*❯[[:space:]]*//p')
+
+    if [ -z "$DECLARED_MARKETPLACES" ] && [ -n "$REGISTERED_MARKETPLACE_NAMES" ]; then
+      log_warn "marketplace declaration parsing returned empty — skipping marketplace removal"
+    else
+      while IFS= read -r registered_name; do
+        [ -z "$registered_name" ] && continue
+        if ! printf '%s\n' "$DECLARED_MARKETPLACES" | grep -qxF "$registered_name"; then
+          log_remove "marketplace: $registered_name ..."
+          REMOVE_OUTPUT=$(claude plugin marketplace remove "$registered_name" 2>&1) && REMOVE_EXIT=0 || REMOVE_EXIT=$?
+          if [ $REMOVE_EXIT -eq 0 ]; then
+            log_remove "removed marketplace $registered_name"
+          else
+            echo "$REMOVE_OUTPUT" | sed 's/^/    /'
+            log_warn "Failed to remove marketplace $registered_name"
+          fi
+        fi
+      done <<< "$REGISTERED_MARKETPLACE_NAMES"
+
+      if [ -d "$MARKETPLACE_DIR" ]; then
+        for registered_dir in "$MARKETPLACE_DIR"/*; do
+          [ -d "$registered_dir" ] || continue
+          registered_name="$(basename "$registered_dir")"
+          [ -z "$registered_name" ] && continue
+          if ! printf '%s\n' "$DECLARED_MARKETPLACES" | grep -qxF "$registered_name"; then
+            log_remove "marketplace: $registered_name ..."
+            REMOVE_OUTPUT=$(claude plugin marketplace remove "$registered_name" 2>&1) && REMOVE_EXIT=0 || REMOVE_EXIT=$?
+            if [ $REMOVE_EXIT -eq 0 ]; then
+              log_remove "removed marketplace $registered_name"
+            else
+              echo "$REMOVE_OUTPUT" | sed 's/^/    /'
+              log_warn "Failed to remove marketplace $registered_name"
+            fi
+          fi
+        done
+      fi
+    fi
+
+    # Pull latest for marketplace clones
     if [ -d "$MARKETPLACE_DIR" ]; then
-      for mp_dir in "$MARKETPLACE_DIR"/*/; do
+      for mp_name in $DECLARED_MARKETPLACES; do
+        mp_dir="$MARKETPLACE_DIR/$mp_name/"
         [ -d "$mp_dir/.git" ] || continue
-        mp_name="$(basename "$mp_dir")"
         MP_PULL_OUTPUT=$(git -C "$mp_dir" pull --ff-only 2>&1) && MP_PULL_EXIT=0 || MP_PULL_EXIT=$?
         if [ $MP_PULL_EXIT -eq 0 ]; then
           if echo "$MP_PULL_OUTPUT" | grep -q "Already up to date"; then
@@ -389,11 +479,17 @@ if [ "$INSTALL_CODEX" = true ]; then
   log_section "  Symlinks..."
   link_file "$REPO_DIR/codex/AGENTS.md"   "$CODEX_DIR/AGENTS.md"
   link_file "$REPO_DIR/codex/hooks.json"  "$CODEX_DIR/hooks.json"
+  link_file "$REPO_DIR/codex/hooks/codex-turn-complete-sound.sh" \
+    "$CODEX_DIR/hooks/codex-turn-complete-sound.sh"
+  link_file "$REPO_DIR/codex/hooks/stop-sound.sh" \
+    "$CODEX_DIR/hooks/stop-sound.sh"
 
-  for hook in "$REPO_DIR"/codex/hooks/*.sh; do
-    [ -f "$hook" ] || continue
-    link_file "$hook" "$CODEX_DIR/hooks/$(basename "$hook")"
-  done
+  if [ -e "$CODEX_DIR/hooks/block-no-verify.sh" ] || [ -L "$CODEX_DIR/hooks/block-no-verify.sh" ]; then
+    rm -f "$CODEX_DIR/hooks/block-no-verify.sh"
+    log_ok "removed obsolete hooks/block-no-verify.sh"
+  else
+    log_skip "obsolete hooks/block-no-verify.sh already absent"
+  fi
   echo ""
 
   # ── config.toml patch ──
@@ -458,7 +554,98 @@ codex_hooks = true' "$CONFIG_TOML"
     log_ok "added [features] codex_hooks = true"
   fi
 
-  # 4. Merge [profiles.harness] block (remove old, append new)
+  # 4. Ensure the managed top-level notify exists exactly once.
+  NOTIFY_STATUS=$(python3 - "$CONFIG_TOML" <<'PYEOF'
+import ast
+import re
+import sys
+
+path = sys.argv[1]
+managed_value = ["bash", "-lc", "~/.codex/hooks/codex-turn-complete-sound.sh"]
+managed_line = 'notify = ["bash", "-lc", "~/.codex/hooks/codex-turn-complete-sound.sh"]\n'
+lines = open(path, encoding="utf-8").read().splitlines(True)
+out = []
+in_section = False
+managed_seen = False
+other_notify_removed = False
+duplicate_removed = False
+i = 0
+
+while i < len(lines):
+    line = lines[i]
+    stripped = line.strip()
+
+    if stripped.startswith("["):
+        in_section = True
+        out.append(line)
+        i += 1
+        continue
+
+    if in_section or not re.match(r"^notify\s*=", stripped):
+        out.append(line)
+        i += 1
+        continue
+
+    block = [line]
+    balance = line.count("[") - line.count("]")
+    i += 1
+    while i < len(lines) and balance > 0:
+        block.append(lines[i])
+        balance += lines[i].count("[") - lines[i].count("]")
+        i += 1
+
+    candidate = "".join(block)
+    candidate = re.sub(r"#.*", "", candidate)
+    candidate = re.sub(r"^\s*notify\s*=\s*", "", candidate, count=1)
+    try:
+        parsed = ast.literal_eval(candidate.strip())
+    except Exception:
+        parsed = None
+
+    if parsed == managed_value and not managed_seen:
+        out.append(managed_line)
+        managed_seen = True
+    elif parsed == managed_value:
+        duplicate_removed = True
+    else:
+        other_notify_removed = True
+
+if not managed_seen:
+    inserted = False
+    for idx, existing in enumerate(out):
+        if existing.strip().startswith("["):
+            out.insert(idx, managed_line)
+            inserted = True
+            break
+    if not inserted:
+        if out and out[-1].strip():
+            out.append("\n")
+        out.append(managed_line)
+
+if other_notify_removed:
+    status = "updated"
+elif duplicate_removed:
+    status = "deduped"
+elif managed_seen:
+    status = "already"
+else:
+    status = "added"
+
+open(path, 'w', encoding="utf-8").writelines(out)
+print(status)
+PYEOF
+)
+  if [ "$NOTIFY_STATUS" = "added" ]; then
+    log_ok "added top-level notify for harness sound hook"
+  elif [ "$NOTIFY_STATUS" = "updated" ]; then
+    log_ok "replaced top-level notify with harness sound hook"
+  elif [ "$NOTIFY_STATUS" = "deduped" ]; then
+    log_ok "deduplicated top-level notify for harness sound hook"
+  else
+    log_ok "top-level notify for harness sound hook already configured"
+  fi
+
+  # 5. Merge [profiles.harness] block (remove old, append new)
   PROFILE_SRC="$REPO_DIR/codex/profile.toml"
   if [ -f "$PROFILE_SRC" ]; then
     # Remove existing [profiles.harness] block using line-by-line parsing
@@ -491,7 +678,7 @@ PYEOF
     log_ok "merged [profiles.harness] from profile.toml"
   fi
 
-  # 5. Trust this harness repo to avoid repeated workspace trust prompts
+  # 6. Trust this harness repo to avoid repeated workspace trust prompts
   TRUST_STATUS=$(python3 - "$CONFIG_TOML" "$REPO_DIR" <<'PYEOF'
 import json
 import sys

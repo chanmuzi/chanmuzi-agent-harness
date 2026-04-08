@@ -1,44 +1,50 @@
 # AGENTS.md
 
-## Scope
+<!-- Generated from shared/project-doc.md via shared/render_project_docs.py. -->
 
-This file defines repository-level rules for maintaining `chanmuzi-agent-harness`.
-Agent-specific behavior should live in each agent's own source docs:
+# Project-Level Instructions
 
-- Claude: `claude/CLAUDE.md`
-- Codex: `codex/AGENTS.md`
+This repo is `chanmuzi-agent-harness` — a unified harness for Claude Code and Codex CLI configuration.
 
-## Cross-Platform Compatibility
+Within this repository, the project-level `CLAUDE.md` and `AGENTS.md` must stay aligned.
+Claude Code and Codex may enter through different filenames, but they should receive the same repository rules here.
 
-This harness targets both macOS (Darwin) and Linux. All shell scripts must work on both.
+## Structure
 
-### Platform-Specific Commands
+- `shared/` contains cross-platform helpers, shell functions, common hooks, and shared project-doc sources
+- `claude/` contains Claude Code config sources for `~/.claude/`
+- `codex/` contains Codex CLI config sources for `~/.codex/`
+- `setup.sh` installs symlinks, patches Codex config, and installs agent extras
+- `check.sh` verifies symlinks, config patches, doc sync, and required dependencies
 
-| Command | macOS (BSD) | Linux (GNU) | Solution |
-|---------|-------------|-------------|----------|
-| `sed -i` | Requires `sed -i ''` | `sed -i` works | Use `sed_inplace()` in `shared/lib/os.sh` |
-| `readlink -f` | Not available natively | Works | Use `resolve_path()` in `shared/lib/os.sh` |
-| `afplay` | Available | Not available | Guard with `uname` check or use `play_sound()` |
+## Repository Rules
 
-### Rules
-
+- Shell scripts must work on both macOS (Darwin) and Linux (GNU)
 - Use helper functions from `shared/lib/os.sh`
+- Use `sed_inplace()` instead of raw `sed -i`
+- Use `resolve_path()` instead of `readlink -f`
+- Use `play_sound()` for notification sounds
 - Guard macOS-only commands with `[ "$(uname -s)" = "Darwin" ]`
 - Guard Linux-only commands with `[ "$(uname -s)" = "Linux" ]`
-
-## Repository Ownership
-
-- `shared/` contains cross-platform helpers and shared shell utilities
-- `claude/` contains Claude-specific config sources
-- `codex/` contains Codex-specific config sources
-- `setup.sh` installs symlinks, patches Codex config, and installs agent extras
-- `check.sh` verifies symlinks, config patches, and required dependencies
-
-## Agent Config Management
-
-- Claude plugins are declared in `claude/settings.json` via `enabledPlugins` and `extraKnownMarketplaces`
-- Codex curated skills are listed in `codex/skills.txt`
-- Codex external skill repos are declared in `codex/external-skills.json`
 - Claude config is fully symlink-managed from `claude/`
 - Codex config is split between symlink-managed files in `codex/` and patch-only updates to `~/.codex/config.toml`
-- Do not treat agent-specific source docs as shared project rules unless they are restated here
+- This harness fully manages Codex `mcp_servers.*` state based on `codex/mcp-servers.json` and may prune undeclared entries during setup
+- Do not overwrite unrelated Codex machine state such as `projects.*` or unrelated `plugins.*`
+- Keep this repo portable: never hardcode usernames or machine-specific absolute paths when a variable such as `$HOME` or `$REPO_DIR` can be used
+
+## Project Doc Policy
+
+- Root `CLAUDE.md` and root `AGENTS.md` are intentionally synchronized project docs for this repository
+- The canonical shared content lives in `shared/project-doc.md`
+- If project-level rules change, regenerate both root docs instead of editing only one
+- Agent-specific global behavior still belongs in `claude/CLAUDE.md` and `codex/AGENTS.md`
+- Do not assume a rule is shared unless it is present in the synchronized root project docs
+
+## Verification
+
+When modifying `setup.sh`, `check.sh`, hooks, project docs, or config files:
+
+1. Regenerate the root project docs if the shared project doc changed
+2. Run `./setup.sh` or the relevant agent-specific setup command
+3. Run `./check.sh`
+4. Only report completion after the checks reflect the final state
