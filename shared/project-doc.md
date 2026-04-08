@@ -1,7 +1,3 @@
-# AGENTS.md
-
-<!-- Generated from shared/project-doc.md via shared/render_project_docs.py. -->
-
 # Project-Level Instructions
 
 This repo is `chanmuzi-agent-harness` — a unified harness for Claude Code and Codex CLI configuration.

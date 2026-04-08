@@ -119,6 +119,57 @@ sync_codex_mcp_servers() {
     return 0
   fi
 
+  PRUNE_OUTPUT=$(python3 - "$config_toml" "$file" <<'PYEOF'
+import json
+import re
+import sys
+
+path, json_path = sys.argv[1], sys.argv[2]
+declared = {entry["name"] for entry in json.load(open(json_path))}
+lines = open(path).read().splitlines(True)
+out = []
+removed = []
+i = 0
+pattern = re.compile(r'^\[mcp_servers\.([^\]]+)\]\s*$')
+
+while i < len(lines):
+    line = lines[i]
+    match = pattern.match(line.strip())
+    if not match:
+        out.append(line)
+        i += 1
+        continue
+
+    name = match.group(1)
+    j = i + 1
+    while j < len(lines) and not lines[j].strip().startswith('['):
+        j += 1
+
+    if name in declared:
+        out.extend(lines[i:j])
+    else:
+        removed.append(name)
+
+    i = j
+
+open(path, "w").writelines(out)
+print("\n".join(removed))
+PYEOF
+) && PRUNE_EXIT=0 || PRUNE_EXIT=$?
+  if [ $PRUNE_EXIT -eq 0 ]; then
+    if [ -n "$PRUNE_OUTPUT" ]; then
+      while IFS= read -r stale_name; do
+        [ -z "$stale_name" ] && continue
+        log_remove "removed unmanaged MCP server: $stale_name"
+      done <<< "$PRUNE_OUTPUT"
+    else
+      log_skip "no unmanaged MCP servers to remove"
+    fi
+  else
+    echo "$PRUNE_OUTPUT" | sed 's/^/    /'
+    log_warn "Failed to prune unmanaged MCP servers"
+  fi
+
   if [ "$(jq 'length' "$file")" -eq 0 ]; then
     log_skip "no managed MCP servers declared"
     echo ""
@@ -275,12 +326,47 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
       fi
     done <<< "$MARKETPLACE_NAMES"
 
-    # Pull latest for marketplace clones
     MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces"
+    DECLARED_MARKETPLACES=$(printf '%s\n' "$MARKETPLACE_NAMES" | awk '{print $1}')
+    REGISTERED_MARKETPLACE_NAMES=$(printf '%s\n' "$REGISTERED_MARKETPLACES" | sed -n 's/^[[:space:]]*❯[[:space:]]*//p')
+
+    while IFS= read -r registered_name; do
+      [ -z "$registered_name" ] && continue
+      if ! printf '%s\n' "$DECLARED_MARKETPLACES" | grep -qxF "$registered_name"; then
+        log_remove "marketplace: $registered_name ..."
+        REMOVE_OUTPUT=$(claude plugin marketplace remove "$registered_name" 2>&1) && REMOVE_EXIT=0 || REMOVE_EXIT=$?
+        if [ $REMOVE_EXIT -eq 0 ]; then
+          log_remove "removed marketplace $registered_name"
+        else
+          echo "$REMOVE_OUTPUT" | sed 's/^/    /'
+          log_warn "Failed to remove marketplace $registered_name"
+        fi
+      fi
+    done <<< "$REGISTERED_MARKETPLACE_NAMES"
+
     if [ -d "$MARKETPLACE_DIR" ]; then
-      for mp_dir in "$MARKETPLACE_DIR"/*/; do
+      for registered_dir in "$MARKETPLACE_DIR"/*; do
+        [ -d "$registered_dir" ] || continue
+        registered_name="$(basename "$registered_dir")"
+        [ -z "$registered_name" ] && continue
+        if ! printf '%s\n' "$DECLARED_MARKETPLACES" | grep -qxF "$registered_name"; then
+          log_remove "marketplace: $registered_name ..."
+          REMOVE_OUTPUT=$(claude plugin marketplace remove "$registered_name" 2>&1) && REMOVE_EXIT=0 || REMOVE_EXIT=$?
+          if [ $REMOVE_EXIT -eq 0 ]; then
+            log_remove "removed marketplace $registered_name"
+          else
+            echo "$REMOVE_OUTPUT" | sed 's/^/    /'
+            log_warn "Failed to remove marketplace $registered_name"
+          fi
+        fi
+      done
+    fi
+
+    # Pull latest for marketplace clones
+    if [ -d "$MARKETPLACE_DIR" ]; then
+      for mp_name in $DECLARED_MARKETPLACES; do
+        mp_dir="$MARKETPLACE_DIR/$mp_name/"
         [ -d "$mp_dir/.git" ] || continue
-        mp_name="$(basename "$mp_dir")"
         MP_PULL_OUTPUT=$(git -C "$mp_dir" pull --ff-only 2>&1) && MP_PULL_EXIT=0 || MP_PULL_EXIT=$?
         if [ $MP_PULL_EXIT -eq 0 ]; then
           if echo "$MP_PULL_OUTPUT" | grep -q "Already up to date"; then

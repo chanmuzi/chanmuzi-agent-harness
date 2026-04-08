@@ -1,30 +1,49 @@
 # CLAUDE.md (project-level)
 
+<!-- Generated from shared/project-doc.md via shared/render_project_docs.py. -->
+
+# Project-Level Instructions
+
 This repo is `chanmuzi-agent-harness` — a unified harness for Claude Code and Codex CLI configuration.
+
+Within this repository, the project-level `CLAUDE.md` and `AGENTS.md` must stay aligned.
+Claude Code and Codex may enter through different filenames, but they should receive the same repository rules here.
 
 ## Structure
 
-- `shared/` — Cross-platform helpers, shell functions, common hooks
-- `claude/` — Claude Code config (symlinked to ~/.claude/)
-- `codex/` — Codex CLI config (symlinked to ~/.codex/)
-- `setup.sh` — Installs symlinks, patches config, installs plugins/skills
-- `check.sh` — Verifies installation health
+- `shared/` contains cross-platform helpers, shell functions, common hooks, and shared project-doc sources
+- `claude/` contains Claude Code config sources for `~/.claude/`
+- `codex/` contains Codex CLI config sources for `~/.codex/`
+- `setup.sh` installs symlinks, patches Codex config, and installs agent extras
+- `check.sh` verifies symlinks, config patches, doc sync, and required dependencies
 
-## Rules
+## Repository Rules
 
-- Shell scripts must work on both macOS (BSD) and Linux (GNU)
-- Use `sed_inplace()` and `resolve_path()` from `shared/lib/os.sh`
+- Shell scripts must work on both macOS (Darwin) and Linux (GNU)
+- Use helper functions from `shared/lib/os.sh`
+- Use `sed_inplace()` instead of raw `sed -i`
+- Use `resolve_path()` instead of `readlink -f`
+- Use `play_sound()` for notification sounds
 - Guard macOS-only commands with `[ "$(uname -s)" = "Darwin" ]`
 - Guard Linux-only commands with `[ "$(uname -s)" = "Linux" ]`
-- Codex `config.toml` is patch-only — never overwrite `projects.*`, `mcp_servers.*`, `plugins.*`
-- Claude `settings.json` is fully managed — safe to overwrite via symlink
-- Agent-specific behavior is managed in each source doc: `claude/CLAUDE.md` for Claude, `codex/AGENTS.md` for Codex
-- This is a public repo — keep everything portable so others can fork/clone and use it
-- Never hardcode absolute paths or usernames; use `$HOME`, `$REPO_DIR`, or placeholders
+- Claude config is fully symlink-managed from `claude/`
+- Codex config is split between symlink-managed files in `codex/` and patch-only updates to `~/.codex/config.toml`
+- Do not overwrite unrelated Codex machine state such as `projects.*`, unmanaged `mcp_servers.*`, or unrelated `plugins.*`
+- Keep this repo portable: never hardcode usernames or machine-specific absolute paths when a variable such as `$HOME` or `$REPO_DIR` can be used
+
+## Project Doc Policy
+
+- Root `CLAUDE.md` and root `AGENTS.md` are intentionally synchronized project docs for this repository
+- The canonical shared content lives in `shared/project-doc.md`
+- If project-level rules change, regenerate both root docs instead of editing only one
+- Agent-specific global behavior still belongs in `claude/CLAUDE.md` and `codex/AGENTS.md`
+- Do not assume a rule is shared unless it is present in the synchronized root project docs
 
 ## Verification
 
-When modifying `setup.sh`, `check.sh`, or any config/hook files:
-1. Run `./setup.sh` (or the relevant `--claude`/`--codex` flag) and confirm no errors or unexpected warnings
-2. Run `./check.sh` to verify installation health
-3. Only report completion after both pass cleanly
+When modifying `setup.sh`, `check.sh`, hooks, project docs, or config files:
+
+1. Regenerate the root project docs if the shared project doc changed
+2. Run `./setup.sh` or the relevant agent-specific setup command
+3. Run `./check.sh`
+4. Only report completion after the checks reflect the final state
