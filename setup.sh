@@ -475,11 +475,17 @@ if [ "$INSTALL_CODEX" = true ]; then
   log_section "  Symlinks..."
   link_file "$REPO_DIR/codex/AGENTS.md"   "$CODEX_DIR/AGENTS.md"
   link_file "$REPO_DIR/codex/hooks.json"  "$CODEX_DIR/hooks.json"
+  link_file "$REPO_DIR/codex/hooks/codex-turn-complete-sound.sh" \
+    "$CODEX_DIR/hooks/codex-turn-complete-sound.sh"
+  link_file "$REPO_DIR/codex/hooks/stop-sound.sh" \
+    "$CODEX_DIR/hooks/stop-sound.sh"
 
-  for hook in "$REPO_DIR"/codex/hooks/*.sh; do
-    [ -f "$hook" ] || continue
-    link_file "$hook" "$CODEX_DIR/hooks/$(basename "$hook")"
-  done
+  if [ -e "$CODEX_DIR/hooks/block-no-verify.sh" ] || [ -L "$CODEX_DIR/hooks/block-no-verify.sh" ]; then
+    rm -f "$CODEX_DIR/hooks/block-no-verify.sh"
+    log_ok "removed obsolete hooks/block-no-verify.sh"
+  else
+    log_skip "obsolete hooks/block-no-verify.sh already absent"
+  fi
   echo ""
 
   # ── config.toml patch ──
@@ -544,7 +550,53 @@ codex_hooks = true' "$CONFIG_TOML"
     log_ok "added [features] codex_hooks = true"
   fi
 
-  # 4. Merge [profiles.harness] block (remove old, append new)
+  # 4. Ensure the managed top-level notify exists exactly once.
+  NOTIFY_STATUS=$(python3 - "$CONFIG_TOML" <<'PYEOF'
+import sys
+
+path = sys.argv[1]
+managed = 'notify = ["bash", "-lc", "~/.codex/hooks/codex-turn-complete-sound.sh"]'
+lines = open(path).read().splitlines(True)
+out = []
+in_section = False
+seen = False
+
+for line in lines:
+    stripped = line.strip()
+    if stripped.startswith('['):
+        in_section = True
+    if not in_section and stripped == managed:
+        if seen:
+            continue
+        seen = True
+    out.append(line)
+
+if not seen:
+    inserted = False
+    for idx, line in enumerate(out):
+        if line.strip().startswith('['):
+            out.insert(idx, managed + '\n')
+            inserted = True
+            break
+    if not inserted:
+        if out and out[-1].strip():
+            out.append('\n')
+        out.append(managed + '\n')
+    status = "added"
+else:
+    status = "already"
+
+open(path, 'w').writelines(out)
+print(status)
+PYEOF
+)
+  if [ "$NOTIFY_STATUS" = "added" ]; then
+    log_ok "added top-level notify for harness sound hook"
+  else
+    log_ok "top-level notify for harness sound hook already configured"
+  fi
+
+  # 5. Merge [profiles.harness] block (remove old, append new)
   PROFILE_SRC="$REPO_DIR/codex/profile.toml"
   if [ -f "$PROFILE_SRC" ]; then
     # Remove existing [profiles.harness] block using line-by-line parsing
@@ -577,7 +629,7 @@ PYEOF
     log_ok "merged [profiles.harness] from profile.toml"
   fi
 
-  # 5. Trust this harness repo to avoid repeated workspace trust prompts
+  # 6. Trust this harness repo to avoid repeated workspace trust prompts
   TRUST_STATUS=$(python3 - "$CONFIG_TOML" "$REPO_DIR" <<'PYEOF'
 import json
 import sys

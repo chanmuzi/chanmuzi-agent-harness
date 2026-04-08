@@ -210,11 +210,17 @@ else
   WARNINGS=$((WARNINGS + 1))
 fi
 
-for hook in "$REPO_DIR"/codex/hooks/*.sh; do
-  [ -f "$hook" ] || continue
-  name="$(basename "$hook")"
-  check_symlink "$CODEX_DIR/hooks/$name" "$hook" "hooks/$name"
-done
+check_symlink "$CODEX_DIR/hooks/codex-turn-complete-sound.sh" \
+  "$REPO_DIR/codex/hooks/codex-turn-complete-sound.sh" "hooks/codex-turn-complete-sound.sh"
+check_symlink "$CODEX_DIR/hooks/stop-sound.sh" \
+  "$REPO_DIR/codex/hooks/stop-sound.sh" "hooks/stop-sound.sh"
+
+if [ -e "$CODEX_DIR/hooks/block-no-verify.sh" ] || [ -L "$CODEX_DIR/hooks/block-no-verify.sh" ]; then
+  log_warn "obsolete hooks/block-no-verify.sh still present"
+  WARNINGS=$((WARNINGS + 1))
+else
+  log_ok "obsolete hooks/block-no-verify.sh absent"
+fi
 
 # config.toml checks
 CONFIG_TOML="$CODEX_DIR/config.toml"
@@ -238,6 +244,41 @@ if [ -f "$CONFIG_TOML" ]; then
   else
     log_warn "[profiles.harness] missing"
     WARNINGS=$((WARNINGS + 1))
+  fi
+
+  TOP_LEVEL_NOTIFY_COUNT=$(python3 - "$CONFIG_TOML" <<'PYEOF'
+import sys
+
+path = sys.argv[1]
+managed = 'notify = ["bash", "-lc", "~/.codex/hooks/codex-turn-complete-sound.sh"]'
+count = 0
+in_section = False
+
+for raw_line in open(path):
+    stripped = raw_line.strip()
+    if stripped.startswith('['):
+        in_section = True
+    if not in_section and stripped == managed:
+        count += 1
+
+print(count)
+PYEOF
+)
+  if [ "$TOP_LEVEL_NOTIFY_COUNT" -eq 1 ]; then
+    log_ok "top-level managed notify configured exactly once"
+  elif [ "$TOP_LEVEL_NOTIFY_COUNT" -gt 1 ]; then
+    log_warn "top-level managed notify duplicated ($TOP_LEVEL_NOTIFY_COUNT entries)"
+    WARNINGS=$((WARNINGS + 1))
+  else
+    log_warn "top-level managed notify missing"
+    WARNINGS=$((WARNINGS + 1))
+  fi
+
+  if grep -q 'stop-sound\.sh' "$CODEX_DIR/hooks.json"; then
+    log_warn "hooks.json still references stop-sound.sh"
+    WARNINGS=$((WARNINGS + 1))
+  else
+    log_ok "hooks.json has no stop-sound.sh reference"
   fi
 
   if grep -q 'oh-my-codex (OMX) Configuration' "$CONFIG_TOML" || \
