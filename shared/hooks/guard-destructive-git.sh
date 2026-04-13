@@ -39,7 +39,7 @@ fi
 
 is_dangerous_git_command() {
   printf '%s\n' "$1" | grep -Eq \
-    'git[[:space:]]+(reset[[:space:]]+--hard|clean[[:space:]]+(-[[:alnum:]-]*[fF][[:alnum:]-]*([dDxX][[:alnum:]-]*)?|-[[:alnum:]-]*[dDxX][[:alnum:]-]*[fF][[:alnum:]-]*)|checkout[[:space:]]+--([[:space:]]|$)|restore([[:space:]]+--source[[:graph:]]+)?([[:space:]]+--worktree)?[[:space:]]+\.([[:space:]]|$)|branch[[:space:]]+-D([[:space:]]|$)|push[[:space:]].*(--force-with-lease|--force|-f)([[:space:]]|$))'
+    'git[[:space:]]+(reset[[:space:]]+--hard|clean[[:space:]]+(-[[:alnum:]-]*[fF][[:alnum:]-]*([dDxX][[:alnum:]-]*)?|-[[:alnum:]-]*[dDxX][[:alnum:]-]*[fF][[:alnum:]-]*)|checkout[[:space:]]+--([[:space:]]|$)|restore([[:space:]]+(--source([=[:space:]])[^[:space:]]+|--worktree|[^[:space:]]+))*[[:space:]]+\.([[:space:]]|$)|branch[[:space:]]+-D([[:space:]]|$)|push[[:space:]].*(--force-with-lease|--force|-f)([[:space:]]|$))'
 }
 
 is_dangerous_rm_command() {
