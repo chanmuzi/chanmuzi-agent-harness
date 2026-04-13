@@ -54,6 +54,16 @@ link_shared_skill_if_present() {
   fi
 }
 
+ensure_executable() {
+  local path="$1"
+  if [ -f "$path" ] && [ ! -x "$path" ]; then
+    chmod +x "$path"
+    log_ok "made executable: $path"
+  elif [ -f "$path" ]; then
+    log_skip "already executable: $path"
+  fi
+}
+
 get_remote_sha() {
   local repo="$1" ref="${2:-main}"
   git ls-remote "https://github.com/$repo.git" "$ref" 2>/dev/null | awk '{print $1}'
@@ -276,6 +286,9 @@ if [ "$INSTALL_CLAUDE" = true ]; then
 
   mkdir -p "$CLAUDE_DIR/hooks" "$CLAUDE_DIR/commands"
 
+  log_section "  Hook Permissions..."
+  ensure_executable "$REPO_DIR/shared/hooks/guard-destructive-git.sh"
+
   # ── Symlinks ──
   log_section "  Symlinks..."
   link_file "$REPO_DIR/claude/CLAUDE.md"       "$CLAUDE_DIR/CLAUDE.md"
@@ -284,6 +297,7 @@ if [ "$INSTALL_CLAUDE" = true ]; then
 
   for hook in "$REPO_DIR"/claude/hooks/*.sh; do
     [ -f "$hook" ] || continue
+    ensure_executable "$hook"
     link_file "$hook" "$CLAUDE_DIR/hooks/$(basename "$hook")"
   done
 
@@ -475,12 +489,18 @@ if [ "$INSTALL_CODEX" = true ]; then
 
   mkdir -p "$CODEX_DIR/hooks" "$CODEX_DIR/skills"
 
+  log_section "  Hook Permissions..."
+  ensure_executable "$REPO_DIR/shared/hooks/guard-destructive-git.sh"
+  ensure_executable "$REPO_DIR/codex/hooks/guard-destructive-git.sh"
+
   # ── Symlinks ──
   log_section "  Symlinks..."
   link_file "$REPO_DIR/codex/AGENTS.md"   "$CODEX_DIR/AGENTS.md"
   link_file "$REPO_DIR/codex/hooks.json"  "$CODEX_DIR/hooks.json"
   link_file "$REPO_DIR/codex/hooks/codex-turn-complete-sound.sh" \
     "$CODEX_DIR/hooks/codex-turn-complete-sound.sh"
+  link_file "$REPO_DIR/codex/hooks/guard-destructive-git.sh" \
+    "$CODEX_DIR/hooks/guard-destructive-git.sh"
   link_file "$REPO_DIR/codex/hooks/stop-sound.sh" \
     "$CODEX_DIR/hooks/stop-sound.sh"
 

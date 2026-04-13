@@ -102,7 +102,20 @@ for hook in "$REPO_DIR"/claude/hooks/*.sh; do
   [ -f "$hook" ] || continue
   name="$(basename "$hook")"
   check_symlink "$CLAUDE_DIR/hooks/$name" "$hook" "hooks/$name"
+  if [ -x "$hook" ]; then
+    log_ok "repo hook executable: claude/hooks/$name"
+  else
+    log_error "repo hook not executable: claude/hooks/$name"
+    ERRORS=$((ERRORS + 1))
+  fi
 done
+
+if [ -x "$REPO_DIR/shared/hooks/guard-destructive-git.sh" ]; then
+  log_ok "shared/hooks/guard-destructive-git.sh executable"
+else
+  log_error "shared/hooks/guard-destructive-git.sh missing or not executable"
+  ERRORS=$((ERRORS + 1))
+fi
 
 for cmd in "$REPO_DIR"/claude/commands/*.md; do
   [ -f "$cmd" ] || continue
@@ -230,8 +243,17 @@ fi
 
 check_symlink "$CODEX_DIR/hooks/codex-turn-complete-sound.sh" \
   "$REPO_DIR/codex/hooks/codex-turn-complete-sound.sh" "hooks/codex-turn-complete-sound.sh"
+check_symlink "$CODEX_DIR/hooks/guard-destructive-git.sh" \
+  "$REPO_DIR/codex/hooks/guard-destructive-git.sh" "hooks/guard-destructive-git.sh"
 check_symlink "$CODEX_DIR/hooks/stop-sound.sh" \
   "$REPO_DIR/codex/hooks/stop-sound.sh" "hooks/stop-sound.sh"
+
+if [ -x "$REPO_DIR/codex/hooks/guard-destructive-git.sh" ]; then
+  log_ok "repo hook executable: codex/hooks/guard-destructive-git.sh"
+else
+  log_error "repo hook not executable: codex/hooks/guard-destructive-git.sh"
+  ERRORS=$((ERRORS + 1))
+fi
 
 if [ -e "$CODEX_DIR/hooks/block-no-verify.sh" ] || [ -L "$CODEX_DIR/hooks/block-no-verify.sh" ]; then
   log_warn "obsolete hooks/block-no-verify.sh still present"
@@ -355,6 +377,16 @@ PYEOF
     WARNINGS=$((WARNINGS + 1))
   else
     log_ok "hooks.json has no stop-sound.sh reference"
+  fi
+
+  if jq -e '
+    (.hooks.PreToolUse // []) |
+    any(.matcher == "Bash" and any(.hooks[]?; .command == "bash ~/.codex/hooks/guard-destructive-git.sh"))
+  ' "$CODEX_DIR/hooks.json" >/dev/null 2>&1; then
+    log_ok "hooks.json registers guard-destructive-git.sh"
+  else
+    log_error "hooks.json missing guard-destructive-git.sh registration"
+    ERRORS=$((ERRORS + 1))
   fi
 
   if grep -q 'oh-my-codex (OMX) Configuration' "$CONFIG_TOML" || \
@@ -577,6 +609,17 @@ PYEOF
       WARNINGS=$((WARNINGS + 1))
     done <<< "$(printf '%b' "$STALE_MCP_NAMES")"
   fi
+fi
+echo ""
+
+if jq -e '
+  (.hooks.PreToolUse // []) |
+  any(.matcher == "Bash" and any(.hooks[]?; .command == "bash ~/.claude/hooks/guard-destructive-git.sh"))
+' "$REPO_DIR/claude/settings.json" >/dev/null 2>&1; then
+  log_ok "claude/settings.json registers guard-destructive-git.sh"
+else
+  log_error "claude/settings.json missing guard-destructive-git.sh registration"
+  ERRORS=$((ERRORS + 1))
 fi
 echo ""
 

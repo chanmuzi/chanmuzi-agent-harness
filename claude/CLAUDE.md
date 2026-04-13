@@ -28,7 +28,8 @@ When encountering errors or failures, never bypass or hide them. Fixing the root
 1. Identify and fix the root cause of the error
 2. If the issue persists after reasonable attempts, stop immediately and report to the user — what failed, what was tried, and why it remains unresolved
 3. Verify actual behavior before reporting completion — static code-level checks alone do not count as "done"
-4. Report verification results as-is — state both successes and failures explicitly
+4. Before any destructive or irreversible operation (hard reset, force push, recursive delete, data drop, etc.), preserve the current state (stash or backup), enumerate what will be lost, and get explicit user confirmation
+5. Report verification results as-is — state both successes and failures explicitly
 
 ## Workflow
 
@@ -54,4 +55,3 @@ Before performing significant actions:
 For project-specific coding style, testing rules, and agent orchestration:
 - Use project-level `CLAUDE.md` at the project root for project-specific rules
 - Project-level CLAUDE.md overrides global settings where they conflict
-

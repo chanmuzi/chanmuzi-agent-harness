@@ -44,6 +44,11 @@
             "type": "command",
             "command": "bash ~/.claude/hooks/block-no-verify.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/guard-destructive-git.sh",
+            "timeout": 5
           }
         ]
       }
