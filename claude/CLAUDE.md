@@ -15,6 +15,13 @@ Prefer creating new objects over mutating existing ones. Use spread operators, `
 ### Small, Focused Files
 Each file should have a single clear purpose. If a file handles multiple distinct responsibilities, split by responsibility.
 
+### Goal-Driven Execution
+When a task is ambiguous or multi-step, convert it into verifiable goals before starting:
+- Define concrete success criteria (e.g., "test passes", "command exits with code 0", "output contains X")
+- State a brief step-by-step plan with a verification check per step
+- Loop: execute a step, verify, then proceed — don't batch steps and verify only at the end
+- If success criteria can't be defined upfront, ask for clarification rather than guessing
+
 ### Error Handling Integrity
 When encountering errors or failures, never bypass or hide them. Fixing the root cause is always the top priority.
 
@@ -45,6 +52,12 @@ Never squash merge — preserve commit history. Only exception is when the user 
 When a task involves multiple logical steps, don't stop after one step.
 Briefly mention what's left or suggest the natural next step.
 Keep it light — a short sentence is enough, not a full plan.
+
+### Subagent Delegation
+When writing prompts for Agent tool calls that involve shell execution or multi-step work:
+- Instruct the agent to report back with: commands run, exit codes, and key output summaries
+- Specify the expected deliverable format so results are actionable, not just "done"
+- Prefer foreground agents when intermediate results inform your next steps
 
 ### Significant Actions
 Before performing significant actions:
