@@ -17,7 +17,7 @@ Each file should have a single clear purpose. If a file handles multiple distinc
 
 ### Goal-Driven Execution
 When a task is ambiguous or multi-step, convert it into verifiable goals before starting:
-- Define concrete success criteria (e.g., "test passes", "command exits 0", "output contains X")
+- Define concrete success criteria (e.g., "test passes", "command exits with code 0", "output contains X")
 - State a brief step-by-step plan with a verification check per step
 - Loop: execute a step, verify, then proceed — don't batch steps and verify only at the end
 - If success criteria can't be defined upfront, ask for clarification rather than guessing
