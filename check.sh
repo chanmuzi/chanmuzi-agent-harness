@@ -117,6 +117,13 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
+if [ -x "$REPO_DIR/shared/hooks/enforce-git-claw.sh" ]; then
+  log_ok "shared/hooks/enforce-git-claw.sh executable"
+else
+  log_error "shared/hooks/enforce-git-claw.sh missing or not executable"
+  ERRORS=$((ERRORS + 1))
+fi
+
 for cmd in "$REPO_DIR"/claude/commands/*.md; do
   [ -f "$cmd" ] || continue
   name="$(basename "$cmd")"
@@ -245,6 +252,8 @@ check_symlink "$CODEX_DIR/hooks/codex-turn-complete-sound.sh" \
   "$REPO_DIR/codex/hooks/codex-turn-complete-sound.sh" "hooks/codex-turn-complete-sound.sh"
 check_symlink "$CODEX_DIR/hooks/guard-destructive-git.sh" \
   "$REPO_DIR/codex/hooks/guard-destructive-git.sh" "hooks/guard-destructive-git.sh"
+check_symlink "$CODEX_DIR/hooks/enforce-git-claw.sh" \
+  "$REPO_DIR/codex/hooks/enforce-git-claw.sh" "hooks/enforce-git-claw.sh"
 check_symlink "$CODEX_DIR/hooks/stop-sound.sh" \
   "$REPO_DIR/codex/hooks/stop-sound.sh" "hooks/stop-sound.sh"
 
@@ -252,6 +261,13 @@ if [ -x "$REPO_DIR/codex/hooks/guard-destructive-git.sh" ]; then
   log_ok "repo hook executable: codex/hooks/guard-destructive-git.sh"
 else
   log_error "repo hook not executable: codex/hooks/guard-destructive-git.sh"
+  ERRORS=$((ERRORS + 1))
+fi
+
+if [ -x "$REPO_DIR/codex/hooks/enforce-git-claw.sh" ]; then
+  log_ok "repo hook executable: codex/hooks/enforce-git-claw.sh"
+else
+  log_error "repo hook not executable: codex/hooks/enforce-git-claw.sh"
   ERRORS=$((ERRORS + 1))
 fi
 
@@ -386,6 +402,16 @@ PYEOF
     log_ok "hooks.json registers guard-destructive-git.sh"
   else
     log_error "hooks.json missing guard-destructive-git.sh registration"
+    ERRORS=$((ERRORS + 1))
+  fi
+
+  if jq -e '
+    (.hooks.PreToolUse // []) |
+    any(.matcher == "Bash" and any(.hooks[]?; .command == "bash ~/.codex/hooks/enforce-git-claw.sh"))
+  ' "$CODEX_DIR/hooks.json" >/dev/null 2>&1; then
+    log_ok "hooks.json registers enforce-git-claw.sh"
+  else
+    log_error "hooks.json missing enforce-git-claw.sh registration"
     ERRORS=$((ERRORS + 1))
   fi
 
@@ -619,6 +645,16 @@ if jq -e '
   log_ok "claude/settings.json registers guard-destructive-git.sh"
 else
   log_error "claude/settings.json missing guard-destructive-git.sh registration"
+  ERRORS=$((ERRORS + 1))
+fi
+
+if jq -e '
+  (.hooks.PreToolUse // []) |
+  any(.matcher == "Bash" and any(.hooks[]?; .command == "bash ~/.claude/hooks/enforce-git-claw.sh"))
+' "$REPO_DIR/claude/settings.json" >/dev/null 2>&1; then
+  log_ok "claude/settings.json registers enforce-git-claw.sh"
+else
+  log_error "claude/settings.json missing enforce-git-claw.sh registration"
   ERRORS=$((ERRORS + 1))
 fi
 echo ""

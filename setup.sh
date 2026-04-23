@@ -288,6 +288,7 @@ if [ "$INSTALL_CLAUDE" = true ]; then
 
   log_section "  Hook Permissions..."
   ensure_executable "$REPO_DIR/shared/hooks/guard-destructive-git.sh"
+  ensure_executable "$REPO_DIR/shared/hooks/enforce-git-claw.sh"
 
   # ── Symlinks ──
   log_section "  Symlinks..."
@@ -491,7 +492,9 @@ if [ "$INSTALL_CODEX" = true ]; then
 
   log_section "  Hook Permissions..."
   ensure_executable "$REPO_DIR/shared/hooks/guard-destructive-git.sh"
+  ensure_executable "$REPO_DIR/shared/hooks/enforce-git-claw.sh"
   ensure_executable "$REPO_DIR/codex/hooks/guard-destructive-git.sh"
+  ensure_executable "$REPO_DIR/codex/hooks/enforce-git-claw.sh"
 
   # ── Symlinks ──
   log_section "  Symlinks..."
@@ -501,6 +504,8 @@ if [ "$INSTALL_CODEX" = true ]; then
     "$CODEX_DIR/hooks/codex-turn-complete-sound.sh"
   link_file "$REPO_DIR/codex/hooks/guard-destructive-git.sh" \
     "$CODEX_DIR/hooks/guard-destructive-git.sh"
+  link_file "$REPO_DIR/codex/hooks/enforce-git-claw.sh" \
+    "$CODEX_DIR/hooks/enforce-git-claw.sh"
   link_file "$REPO_DIR/codex/hooks/stop-sound.sh" \
     "$CODEX_DIR/hooks/stop-sound.sh"
 

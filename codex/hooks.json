@@ -8,6 +8,11 @@
             "type": "command",
             "command": "bash ~/.codex/hooks/guard-destructive-git.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.codex/hooks/enforce-git-claw.sh",
+            "timeout": 5
           }
         ]
       }
