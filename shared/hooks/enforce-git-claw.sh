@@ -60,8 +60,8 @@ emit_block() {
   exit 2
 }
 
-# 1. Bulk staging (/commit skill forbids "git add -A", "git add .", "git add -u").
-if printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+add[[:space:]]+(-A|--all|-u|--update|\.|:/?)([[:space:]]|$)'; then
+# 1. Bulk staging (/commit skill forbids "git add -A", "git add .", "git add -u", "git add :/").
+if printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+add[[:space:]]+(-A|--all|-u|--update|\.|:/)([[:space:]]|$)'; then
   emit_block \
     'bulk staging (git add -A/--all/-u/--update/./:\/) bypasses per-file staging required by the /commit skill' \
     'invoke the /commit skill instead'
@@ -82,20 +82,33 @@ if printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+commit\
     'invoke the /commit skill instead'
 fi
 
-# 3b. git commit with -m/--message (supports both space and = forms) whose
-#     message lacks the Conventional Commits prefix the /commit skill emits.
-if printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+commit\b.*([[:space:]](-m|--message)([[:space:]]|=))'; then
-  MSG="$(printf '%s\n' "$COMMAND" | perl -ne '
-    if (/\bgit\s+commit\b[^|;&]*?\s(?:-m|--message)[\s=]+("([^"\\]*(?:\\.[^"\\]*)*)"|'"'"'([^'"'"']*)'"'"'|(\S+))/) {
-      print defined $2 ? $2 : defined $3 ? $3 : $4;
-      exit;
-    }
-  ' 2>/dev/null)"
-  if [ -n "$MSG" ] && ! printf '%s' "$MSG" | grep -Eq "^$COMMIT_PREFIX"; then
+# 3b. git commit with -m/--message (space, =, or concatenated short form like
+#     -m"..." / -m'...' / -mword) whose message lacks the Conventional Commits
+#     prefix the /commit skill emits. If -m/--message is present but the message
+#     cannot be parsed, block anyway — we cannot verify the prefix safely.
+COMMIT_MSG_PARSE="$(printf '%s\n' "$COMMAND" | perl -ne '
+  if (/\bgit\s+commit\b[^|;&]*?\s(?:-m(?:[\s=]+|(?=["\x27\S]))|--message(?:[\s=]+|=))("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))/) {
+    my $msg = defined $2 ? $2 : defined $3 ? $3 : $4;
+    print "parsed\n$msg";
+    exit;
+  }
+  if (/\bgit\s+commit\b[^|;&]*?\s(?:-m(?:[\s=]+|(?=["\x27\S]))|--message(?:[\s=]+|=))/) {
+    print "found";
+    exit;
+  }
+' 2>/dev/null)"
+COMMIT_MSG_STATUS="$(printf '%s\n' "$COMMIT_MSG_PARSE" | head -n1)"
+if [ "$COMMIT_MSG_STATUS" = "parsed" ]; then
+  MSG="$(printf '%s\n' "$COMMIT_MSG_PARSE" | tail -n +2)"
+  if ! printf '%s' "$MSG" | grep -Eq "^$COMMIT_PREFIX"; then
     emit_block \
       "commit message \"$MSG\" lacks the Conventional Commits prefix required by the /commit skill" \
       'invoke the /commit skill to generate a properly-formatted message'
   fi
+elif [ "$COMMIT_MSG_STATUS" = "found" ]; then
+  emit_block \
+    'git commit -m/--message detected but the message could not be parsed for Conventional Commits verification' \
+    'invoke the /commit skill instead'
 fi
 
 # 4. gh pr create whose --title lacks the /pr skill prefix.
