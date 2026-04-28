@@ -19,8 +19,9 @@ if [ -n "$TOOL_NAME" ] && [ "$TOOL_NAME" != "Bash" ]; then
   exit 0
 fi
 
-if printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+(commit|push)\b.*--no-verify([[:space:]]|$)'; then
-  printf 'BLOCKED: --no-verify is not allowed. Fix the underlying issue instead of skipping hooks.\n' >&2
+if printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+commit([[:space:]]+[^;&|]*)?[[:space:]](--no-verify|-n)([;&|[:space:]]|$)' ||
+   printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+push([[:space:]]+[^;&|]*)?[[:space:]]--no-verify([;&|[:space:]]|$)'; then
+  printf 'BLOCKED: --no-verify and git commit -n are not allowed. Fix the underlying issue instead of skipping hooks.\n' >&2
   printf 'Command: %s\n' "$COMMAND" >&2
   exit 2
 fi

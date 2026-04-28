@@ -533,27 +533,33 @@ TOML
   fi
 
   # 1. Remove global model pinning (let Codex use its own default)
-  REMOVED_MODEL=false
-  if grep -qE '^model[[:space:]]*=' "$CONFIG_TOML" || grep -qE '^model_reasoning_effort[[:space:]]*=' "$CONFIG_TOML"; then
-    python3 - "$CONFIG_TOML" <<'PYEOF'
+  if MODEL_PIN_STATUS="$(python3 - "$CONFIG_TOML" <<'PYEOF'
 import sys
 import re
+
 path = sys.argv[1]
-lines = open(path).readlines()
-out, in_section = [], False
+lines = open(path, encoding="utf-8").readlines()
+out, in_section, removed = [], False, False
 for line in lines:
     if line.strip().startswith('['):
         in_section = True
     if not in_section and re.match(r'^(model|model_reasoning_effort)\s*=', line):
+        removed = True
         continue
     out.append(line)
-open(path, 'w').writelines(out)
+if removed:
+    open(path, 'w', encoding="utf-8").writelines(out)
+print("removed" if removed else "absent")
 PYEOF
-    log_ok "removed global model/model_reasoning_effort (let Codex decide)"
-    REMOVED_MODEL=true
-  fi
-  if [ "$REMOVED_MODEL" = false ]; then
-    log_skip "global model pinning already absent"
+  )"; then
+    case "$MODEL_PIN_STATUS" in
+      removed) log_ok "removed global model/model_reasoning_effort (let Codex decide)" ;;
+      absent)  log_skip "global model pinning already absent" ;;
+      *)       log_warn "unexpected model pinning status: $MODEL_PIN_STATUS" ;;
+    esac
+  else
+    log_error "failed to inspect top-level Codex model pinning"
+    exit 1
   fi
 
   # 2. Remove model_instructions_file (migrated to AGENTS.md)

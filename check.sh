@@ -351,11 +351,29 @@ fi
 # config.toml checks
 CONFIG_TOML="$CODEX_DIR/config.toml"
 if [ -f "$CONFIG_TOML" ]; then
-  if grep -qE '^model[[:space:]]*=' "$CONFIG_TOML" || grep -qE '^model_reasoning_effort[[:space:]]*=' "$CONFIG_TOML"; then
-    log_warn "global model/model_reasoning_effort still present (setup.sh should remove top-level model pinning)"
-    WARNINGS=$((WARNINGS + 1))
+  if TOP_LEVEL_MODEL_PINNING="$(python3 - "$CONFIG_TOML" <<'PYEOF'
+import re
+import sys
+
+for line in open(sys.argv[1], encoding="utf-8"):
+    if line.strip().startswith("["):
+        break
+    if re.match(r"^(model|model_reasoning_effort)\s*=", line):
+        print("present")
+        break
+else:
+    print("absent")
+PYEOF
+  )"; then
+    if [ "$TOP_LEVEL_MODEL_PINNING" = "present" ]; then
+      log_warn "global model/model_reasoning_effort still present (setup.sh should remove top-level model pinning)"
+      WARNINGS=$((WARNINGS + 1))
+    else
+      log_ok "global model/model_reasoning_effort pinning absent"
+    fi
   else
-    log_ok "global model/model_reasoning_effort pinning absent"
+    log_error "failed to inspect top-level Codex model pinning"
+    ERRORS=$((ERRORS + 1))
   fi
 
   if grep -q 'model_instructions_file' "$CONFIG_TOML"; then
