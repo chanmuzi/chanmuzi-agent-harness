@@ -1,21 +1,17 @@
 #!/bin/bash
-# PreToolUse hook: Block --no-verify flag on git commits
-# Exit 2 = block the tool call, Exit 0 = allow
+# Claude wrapper for the shared --no-verify guard.
 
-# jq is required to parse hook input
-command -v jq &>/dev/null || exit 0
+SCRIPT_PATH="$0"
+while [ -L "$SCRIPT_PATH" ]; do
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd -P)"
+  LINK_TARGET="$(readlink "$SCRIPT_PATH")"
+  case "$LINK_TARGET" in
+    /*) SCRIPT_PATH="$LINK_TARGET" ;;
+    *) SCRIPT_PATH="$SCRIPT_DIR/$LINK_TARGET" ;;
+  esac
+done
 
-INPUT=$(cat)
-TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
-TOOL_INPUT=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd -P)"
+REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
 
-# Only check Bash tool calls
-[ "$TOOL" != "Bash" ] && exit 0
-
-# Block --no-verify on git commit/push
-if echo "$TOOL_INPUT" | grep -qE 'git\s+(commit|push).*--no-verify'; then
-  echo "BLOCKED: --no-verify is not allowed. Pre-commit hooks must run."
-  exit 2
-fi
-
-exit 0
+exec "$REPO_DIR/shared/hooks/block-no-verify.sh"

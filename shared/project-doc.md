@@ -36,6 +36,15 @@ Claude Code and Codex may enter through different filenames, but they should rec
 - Agent-specific global behavior still belongs in `claude/CLAUDE.md` and `codex/AGENTS.md`
 - Do not assume a rule is shared unless it is present in the synchronized root project docs
 
+## Agent Parity Policy
+
+- Claude Code and Codex CLI do not need one-to-one feature parity; their ecosystems are different
+- The harness must keep minimum policy parity for safety, git workflow, verification, and project-doc behavior
+- Differences in plugins, skills, MCP servers, commands, or runtime-specific features are acceptable only when intentional
+- When adding or removing a Claude-only or Codex-only capability, either add an equivalent counterpart or update `check.sh`/docs so the difference is visible
+- Shared guardrails should live in `shared/hooks/` when both agents can enforce the same rule
+- Agent-specific global docs may use different wording, but they must preserve the same minimum working rules: verify before completion, do not hide failures, get approval for risky/git-finalizing actions, and keep git workflow routed through the managed skills/hooks
+
 ## Verification
 
 When modifying `setup.sh`, `check.sh`, hooks, project docs, or config files:

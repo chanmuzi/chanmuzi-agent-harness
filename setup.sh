@@ -287,6 +287,7 @@ if [ "$INSTALL_CLAUDE" = true ]; then
   mkdir -p "$CLAUDE_DIR/hooks" "$CLAUDE_DIR/commands"
 
   log_section "  Hook Permissions..."
+  ensure_executable "$REPO_DIR/shared/hooks/block-no-verify.sh"
   ensure_executable "$REPO_DIR/shared/hooks/guard-destructive-git.sh"
   ensure_executable "$REPO_DIR/shared/hooks/enforce-git-claw.sh"
 
@@ -491,8 +492,10 @@ if [ "$INSTALL_CODEX" = true ]; then
   mkdir -p "$CODEX_DIR/hooks" "$CODEX_DIR/skills"
 
   log_section "  Hook Permissions..."
+  ensure_executable "$REPO_DIR/shared/hooks/block-no-verify.sh"
   ensure_executable "$REPO_DIR/shared/hooks/guard-destructive-git.sh"
   ensure_executable "$REPO_DIR/shared/hooks/enforce-git-claw.sh"
+  ensure_executable "$REPO_DIR/codex/hooks/block-no-verify.sh"
   ensure_executable "$REPO_DIR/codex/hooks/guard-destructive-git.sh"
   ensure_executable "$REPO_DIR/codex/hooks/enforce-git-claw.sh"
 
@@ -500,6 +503,8 @@ if [ "$INSTALL_CODEX" = true ]; then
   log_section "  Symlinks..."
   link_file "$REPO_DIR/codex/AGENTS.md"   "$CODEX_DIR/AGENTS.md"
   link_file "$REPO_DIR/codex/hooks.json"  "$CODEX_DIR/hooks.json"
+  link_file "$REPO_DIR/codex/hooks/block-no-verify.sh" \
+    "$CODEX_DIR/hooks/block-no-verify.sh"
   link_file "$REPO_DIR/codex/hooks/codex-turn-complete-sound.sh" \
     "$CODEX_DIR/hooks/codex-turn-complete-sound.sh"
   link_file "$REPO_DIR/codex/hooks/guard-destructive-git.sh" \
@@ -509,12 +514,6 @@ if [ "$INSTALL_CODEX" = true ]; then
   link_file "$REPO_DIR/codex/hooks/stop-sound.sh" \
     "$CODEX_DIR/hooks/stop-sound.sh"
 
-  if [ -e "$CODEX_DIR/hooks/block-no-verify.sh" ] || [ -L "$CODEX_DIR/hooks/block-no-verify.sh" ]; then
-    rm -f "$CODEX_DIR/hooks/block-no-verify.sh"
-    log_ok "removed obsolete hooks/block-no-verify.sh"
-  else
-    log_skip "obsolete hooks/block-no-verify.sh already absent"
-  fi
   echo ""
 
   # ── config.toml patch ──
@@ -534,26 +533,33 @@ TOML
   fi
 
   # 1. Remove global model pinning (let Codex use its own default)
-  REMOVED_MODEL=false
-  if grep -q '^model ' "$CONFIG_TOML" || grep -q '^model_reasoning_effort' "$CONFIG_TOML"; then
-    python3 - "$CONFIG_TOML" <<'PYEOF'
+  if MODEL_PIN_STATUS="$(python3 - "$CONFIG_TOML" <<'PYEOF'
 import sys
+import re
+
 path = sys.argv[1]
-lines = open(path).readlines()
-out, in_section = [], False
+lines = open(path, encoding="utf-8").readlines()
+out, in_section, removed = [], False, False
 for line in lines:
     if line.strip().startswith('['):
         in_section = True
-    if not in_section and (line.startswith('model ') or line.startswith('model_reasoning_effort')):
+    if not in_section and re.match(r'^(model|model_reasoning_effort)\s*=', line):
+        removed = True
         continue
     out.append(line)
-open(path, 'w').writelines(out)
+if removed:
+    open(path, 'w', encoding="utf-8").writelines(out)
+print("removed" if removed else "absent")
 PYEOF
-    log_ok "removed global model/model_reasoning_effort (let Codex decide)"
-    REMOVED_MODEL=true
-  fi
-  if [ "$REMOVED_MODEL" = false ]; then
-    log_skip "global model pinning already absent"
+  )"; then
+    case "$MODEL_PIN_STATUS" in
+      removed) log_ok "removed global model/model_reasoning_effort (let Codex decide)" ;;
+      absent)  log_skip "global model pinning already absent" ;;
+      *)       log_warn "unexpected model pinning status: $MODEL_PIN_STATUS" ;;
+    esac
+  else
+    log_error "failed to inspect top-level Codex model pinning"
+    exit 1
   fi
 
   # 2. Remove model_instructions_file (migrated to AGENTS.md)

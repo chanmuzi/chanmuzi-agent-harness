@@ -6,6 +6,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash ~/.codex/hooks/block-no-verify.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "bash ~/.codex/hooks/guard-destructive-git.sh",
             "timeout": 5
           },
