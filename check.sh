@@ -281,6 +281,26 @@ log_section "[Codex CLI]"
 
 if command -v codex &>/dev/null; then
   log_ok "CLI: $(codex --version 2>/dev/null || echo 'found')"
+  CODEX_FEATURES_OUTPUT="$(codex features list 2>/dev/null || true)"
+  if [ -n "$CODEX_FEATURES_OUTPUT" ]; then
+    CODEX_HOOKS_FEATURE="$(printf '%s\n' "$CODEX_FEATURES_OUTPUT" | awk '$1 == "codex_hooks" {print $2 " " $3; exit}')"
+    case "$CODEX_HOOKS_FEATURE" in
+      "stable true")
+        log_ok "codex_hooks feature: stable/enabled"
+        ;;
+      "")
+        log_error "codex_hooks feature missing (upgrade @openai/codex; hooks guardrails unavailable)"
+        ERRORS=$((ERRORS + 1))
+        ;;
+      *)
+        log_error "codex_hooks feature not stable/enabled: $CODEX_HOOKS_FEATURE"
+        ERRORS=$((ERRORS + 1))
+        ;;
+    esac
+  else
+    log_warn "codex features list unavailable (could not verify codex_hooks support)"
+    WARNINGS=$((WARNINGS + 1))
+  fi
 else
   log_warn "CLI not found"
   WARNINGS=$((WARNINGS + 1))
