@@ -50,6 +50,16 @@ check_shared_skill_if_present() {
   fi
 }
 
+check_contains() {
+  local file="$1" pattern="$2" label="$3"
+  if grep -qF "$pattern" "$file" 2>/dev/null; then
+    log_ok "$label"
+  else
+    log_error "$label missing"
+    ERRORS=$((ERRORS + 1))
+  fi
+}
+
 codex_mcp_field() {
   local name="$1" field="$2"
   codex mcp get "$name" 2>/dev/null | awk -F': ' -v key="$field" '$1 ~ "^  " key "$" {print $2}'
@@ -114,6 +124,13 @@ if [ -x "$REPO_DIR/shared/hooks/guard-destructive-git.sh" ]; then
   log_ok "shared/hooks/guard-destructive-git.sh executable"
 else
   log_error "shared/hooks/guard-destructive-git.sh missing or not executable"
+  ERRORS=$((ERRORS + 1))
+fi
+
+if [ -x "$REPO_DIR/shared/hooks/block-no-verify.sh" ]; then
+  log_ok "shared/hooks/block-no-verify.sh executable"
+else
+  log_error "shared/hooks/block-no-verify.sh missing or not executable"
   ERRORS=$((ERRORS + 1))
 fi
 
@@ -226,6 +243,37 @@ else
 fi
 echo ""
 
+# parity policy checks
+check_contains "$REPO_DIR/shared/project-doc.md" "## Agent Parity Policy" "project docs: Agent Parity Policy"
+check_contains "$REPO_DIR/claude/CLAUDE.md" "Verify Before Acting or Reporting" "claude global doc: verify policy"
+check_contains "$REPO_DIR/claude/CLAUDE.md" "Error Handling Integrity" "claude global doc: error policy"
+check_contains "$REPO_DIR/claude/CLAUDE.md" 'Use `/commit`, `/pr`, `/pr release`, `/review` skills' "claude global doc: git workflow policy"
+check_contains "$REPO_DIR/codex/AGENTS.md" "Verify Before Acting or Reporting" "codex global doc: verify policy"
+check_contains "$REPO_DIR/codex/AGENTS.md" "Error Handling Integrity" "codex global doc: error policy"
+check_contains "$REPO_DIR/codex/AGENTS.md" "managed git workflow skills" "codex global doc: git workflow policy"
+
+TEMPLATE_PARITY_STATUS=$(python3 - "$REPO_DIR/templates/AGENTS.md" "$REPO_DIR/templates/CLAUDE.md" <<'PYEOF'
+import sys
+from pathlib import Path
+
+agents = Path(sys.argv[1])
+claude = Path(sys.argv[2])
+if not agents.exists() or not claude.exists():
+    print("missing")
+    raise SystemExit
+
+agents_body = "\n".join(agents.read_text(encoding="utf-8").splitlines()[1:])
+claude_body = "\n".join(claude.read_text(encoding="utf-8").splitlines()[1:])
+print("ok" if agents_body == claude_body else "diff")
+PYEOF
+)
+case "$TEMPLATE_PARITY_STATUS" in
+  ok)      log_ok "templates: AGENTS.md and CLAUDE.md bodies match" ;;
+  missing) log_error "templates: AGENTS.md or CLAUDE.md missing"; ERRORS=$((ERRORS + 1)) ;;
+  *)       log_warn "templates: AGENTS.md and CLAUDE.md bodies differ"; WARNINGS=$((WARNINGS + 1)) ;;
+esac
+echo ""
+
 # ══════════════════════════════════════════
 # CODEX CLI
 # ══════════════════════════════════════════
@@ -250,6 +298,8 @@ fi
 
 check_symlink "$CODEX_DIR/hooks/codex-turn-complete-sound.sh" \
   "$REPO_DIR/codex/hooks/codex-turn-complete-sound.sh" "hooks/codex-turn-complete-sound.sh"
+check_symlink "$CODEX_DIR/hooks/block-no-verify.sh" \
+  "$REPO_DIR/codex/hooks/block-no-verify.sh" "hooks/block-no-verify.sh"
 check_symlink "$CODEX_DIR/hooks/guard-destructive-git.sh" \
   "$REPO_DIR/codex/hooks/guard-destructive-git.sh" "hooks/guard-destructive-git.sh"
 check_symlink "$CODEX_DIR/hooks/enforce-git-claw.sh" \
@@ -271,16 +321,23 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
-if [ -e "$CODEX_DIR/hooks/block-no-verify.sh" ] || [ -L "$CODEX_DIR/hooks/block-no-verify.sh" ]; then
-  log_warn "obsolete hooks/block-no-verify.sh still present"
-  WARNINGS=$((WARNINGS + 1))
+if [ -x "$REPO_DIR/codex/hooks/block-no-verify.sh" ]; then
+  log_ok "repo hook executable: codex/hooks/block-no-verify.sh"
 else
-  log_ok "obsolete hooks/block-no-verify.sh absent"
+  log_error "repo hook not executable: codex/hooks/block-no-verify.sh"
+  ERRORS=$((ERRORS + 1))
 fi
 
 # config.toml checks
 CONFIG_TOML="$CODEX_DIR/config.toml"
 if [ -f "$CONFIG_TOML" ]; then
+  if grep -qE '^model[[:space:]]*=' "$CONFIG_TOML" || grep -qE '^model_reasoning_effort[[:space:]]*=' "$CONFIG_TOML"; then
+    log_warn "global model/model_reasoning_effort still present (setup.sh should remove top-level model pinning)"
+    WARNINGS=$((WARNINGS + 1))
+  else
+    log_ok "global model/model_reasoning_effort pinning absent"
+  fi
+
   if grep -q 'model_instructions_file' "$CONFIG_TOML"; then
     log_warn "model_instructions_file still present (should be removed)"
     WARNINGS=$((WARNINGS + 1))
@@ -393,6 +450,16 @@ PYEOF
     WARNINGS=$((WARNINGS + 1))
   else
     log_ok "hooks.json has no stop-sound.sh reference"
+  fi
+
+  if jq -e '
+    (.hooks.PreToolUse // []) |
+    any(.matcher == "Bash" and any(.hooks[]?; .command == "bash ~/.codex/hooks/block-no-verify.sh"))
+  ' "$CODEX_DIR/hooks.json" >/dev/null 2>&1; then
+    log_ok "hooks.json registers block-no-verify.sh"
+  else
+    log_error "hooks.json missing block-no-verify.sh registration"
+    ERRORS=$((ERRORS + 1))
   fi
 
   if jq -e '

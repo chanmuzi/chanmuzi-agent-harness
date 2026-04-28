@@ -1,11 +1,17 @@
 #!/bin/bash
-# Block --no-verify flag in git commands (Codex version)
-# Codex PreToolUse sends JSON on stdin with tool_input.command
+# Codex wrapper for the shared --no-verify guard.
 
-INPUT="$(cat)"
-COMMAND="$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)"
+SCRIPT_PATH="$0"
+while [ -L "$SCRIPT_PATH" ]; do
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd -P)"
+  LINK_TARGET="$(readlink "$SCRIPT_PATH")"
+  case "$LINK_TARGET" in
+    /*) SCRIPT_PATH="$LINK_TARGET" ;;
+    *) SCRIPT_PATH="$SCRIPT_DIR/$LINK_TARGET" ;;
+  esac
+done
 
-if echo "$COMMAND" | grep -qE -- '--no-verify'; then
-  echo '{"decision":"block","reason":"--no-verify is not allowed. Fix the underlying issue instead of skipping hooks."}' >&2
-  exit 2
-fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd -P)"
+REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
+
+exec "$REPO_DIR/shared/hooks/block-no-verify.sh"

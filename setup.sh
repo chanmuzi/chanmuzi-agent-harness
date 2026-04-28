@@ -287,6 +287,7 @@ if [ "$INSTALL_CLAUDE" = true ]; then
   mkdir -p "$CLAUDE_DIR/hooks" "$CLAUDE_DIR/commands"
 
   log_section "  Hook Permissions..."
+  ensure_executable "$REPO_DIR/shared/hooks/block-no-verify.sh"
   ensure_executable "$REPO_DIR/shared/hooks/guard-destructive-git.sh"
   ensure_executable "$REPO_DIR/shared/hooks/enforce-git-claw.sh"
 
@@ -491,8 +492,10 @@ if [ "$INSTALL_CODEX" = true ]; then
   mkdir -p "$CODEX_DIR/hooks" "$CODEX_DIR/skills"
 
   log_section "  Hook Permissions..."
+  ensure_executable "$REPO_DIR/shared/hooks/block-no-verify.sh"
   ensure_executable "$REPO_DIR/shared/hooks/guard-destructive-git.sh"
   ensure_executable "$REPO_DIR/shared/hooks/enforce-git-claw.sh"
+  ensure_executable "$REPO_DIR/codex/hooks/block-no-verify.sh"
   ensure_executable "$REPO_DIR/codex/hooks/guard-destructive-git.sh"
   ensure_executable "$REPO_DIR/codex/hooks/enforce-git-claw.sh"
 
@@ -500,6 +503,8 @@ if [ "$INSTALL_CODEX" = true ]; then
   log_section "  Symlinks..."
   link_file "$REPO_DIR/codex/AGENTS.md"   "$CODEX_DIR/AGENTS.md"
   link_file "$REPO_DIR/codex/hooks.json"  "$CODEX_DIR/hooks.json"
+  link_file "$REPO_DIR/codex/hooks/block-no-verify.sh" \
+    "$CODEX_DIR/hooks/block-no-verify.sh"
   link_file "$REPO_DIR/codex/hooks/codex-turn-complete-sound.sh" \
     "$CODEX_DIR/hooks/codex-turn-complete-sound.sh"
   link_file "$REPO_DIR/codex/hooks/guard-destructive-git.sh" \
@@ -509,12 +514,6 @@ if [ "$INSTALL_CODEX" = true ]; then
   link_file "$REPO_DIR/codex/hooks/stop-sound.sh" \
     "$CODEX_DIR/hooks/stop-sound.sh"
 
-  if [ -e "$CODEX_DIR/hooks/block-no-verify.sh" ] || [ -L "$CODEX_DIR/hooks/block-no-verify.sh" ]; then
-    rm -f "$CODEX_DIR/hooks/block-no-verify.sh"
-    log_ok "removed obsolete hooks/block-no-verify.sh"
-  else
-    log_skip "obsolete hooks/block-no-verify.sh already absent"
-  fi
   echo ""
 
   # ── config.toml patch ──
@@ -535,16 +534,17 @@ TOML
 
   # 1. Remove global model pinning (let Codex use its own default)
   REMOVED_MODEL=false
-  if grep -q '^model ' "$CONFIG_TOML" || grep -q '^model_reasoning_effort' "$CONFIG_TOML"; then
+  if grep -qE '^model[[:space:]]*=' "$CONFIG_TOML" || grep -qE '^model_reasoning_effort[[:space:]]*=' "$CONFIG_TOML"; then
     python3 - "$CONFIG_TOML" <<'PYEOF'
 import sys
+import re
 path = sys.argv[1]
 lines = open(path).readlines()
 out, in_section = [], False
 for line in lines:
     if line.strip().startswith('['):
         in_section = True
-    if not in_section and (line.startswith('model ') or line.startswith('model_reasoning_effort')):
+    if not in_section and re.match(r'^(model|model_reasoning_effort)\s*=', line):
         continue
     out.append(line)
 open(path, 'w').writelines(out)

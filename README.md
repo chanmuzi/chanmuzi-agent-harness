@@ -96,6 +96,16 @@ chmod +x setup.sh check.sh
 | Claude Code | 심링크 (전체 교체) | `settings.json`이 100% 공통 설정 |
 | Codex CLI | 심링크 + config.toml patch | `config.toml`에 머신별 설정이 섞여 있음 |
 
+## Agent parity 정책
+
+Claude Code와 Codex CLI의 플러그인/스킬 생태계는 다르므로 완전한 1:1 매핑을 목표로 하지 않습니다.
+대신 안전장치, git workflow, 검증 규칙, 프로젝트 문서 동기화는 양쪽에서 같은 수준으로 유지합니다.
+
+- 공통으로 강제할 수 있는 guardrail은 `shared/hooks/`에 둡니다.
+- 한쪽에만 있는 플러그인/스킬은 의도된 차이인지 확인하고, `check.sh`나 문서에 드러나게 관리합니다.
+- 루트 `CLAUDE.md`와 `AGENTS.md`는 `shared/project-doc.md`에서 렌더링해 항상 동기화합니다.
+- 프로젝트 템플릿은 `templates/CLAUDE.md`와 `templates/AGENTS.md`를 쌍으로 유지합니다.
+
 ## 보안 모델
 
 이 harness는 기본적으로 Claude Code와 Codex CLI를 **퍼미션리스 모드**(권한 확인 없이 실행)로 설정합니다.
