@@ -45,12 +45,18 @@ fi
 
 # Build a body-stripped copy of the command for git/gh argument detection.
 # `gh issue create` and `gh pr create` may embed code examples (including
-# `git commit -m "..."`) inside --body / --body-file arguments; without
-# stripping them, the git detectors below would trip on documentation
-# snippets that are not actually being executed.
+# `git commit -m "..."`) inside body arguments; without stripping them,
+# the git detectors below would trip on documentation snippets that are
+# not actually being executed. Restrict the strip to gh issue/pr create
+# segments so that `-F` (which is also `git commit -F/--file`, a real
+# violation) is only redacted in gh contexts.
 COMMAND_NO_BODY="$(printf '%s' "$COMMAND" | perl -0777 -pe '
-  s{--body(?:\s*=\s*|\s+)("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{ --body REDACTED}g;
-  s{--body-file(?:\s*=\s*|\s+)\S+}{ --body-file REDACTED}g;
+  s{(\bgh\s+(?:issue|pr)\s+create\b[^|;&]*)}{
+    my $seg = $1;
+    $seg =~ s{(?<=\s)(?:--body|-b)(?:[\s=]+|(?=["\x27\S]))("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{--body REDACTED}g;
+    $seg =~ s{(?<=\s)(?:--body-file|-F)(?:[\s=]+|(?=["\x27\S]))\S+}{--body-file REDACTED}g;
+    $seg;
+  }ge;
 ' 2>/dev/null)"
 if [ -z "$COMMAND_NO_BODY" ]; then
   COMMAND_NO_BODY="$COMMAND"
@@ -60,8 +66,15 @@ fi
 # `gh pr create --title ...` or `gh issue create ...` as documentation
 # (e.g. release notes that quote those commands). Without stripping, the
 # gh detectors below would falsely trigger on text inside commit messages.
+# Match the entire `git commit ...` segment, then strip every -m/--message
+# value within that segment so multi-`-m` invocations are fully covered.
 COMMAND_NO_GIT_MSG="$(printf '%s' "$COMMAND" | perl -0777 -pe '
-  s{(\bgit\s+commit\b[^|;&]*?\s(?:-m(?:[\s=]+|(?=["\x27\S]))|--message(?:[\s=]+|=)))("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{$1 REDACTED}g;
+  s{(\bgit\s+commit\b[^|;&]*)}{
+    my $seg = $1;
+    $seg =~ s{(?<=\s)-m(?:[\s=]+|(?=["\x27\S]))("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{-m REDACTED}g;
+    $seg =~ s{(?<=\s)--message(?:[\s=]+|=)("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{--message REDACTED}g;
+    $seg;
+  }ge;
 ' 2>/dev/null)"
 if [ -z "$COMMAND_NO_GIT_MSG" ]; then
   COMMAND_NO_GIT_MSG="$COMMAND"
@@ -124,7 +137,12 @@ COMMIT_MSG_PARSE="$(printf '%s\n' "$COMMAND_NO_BODY" | perl -0777 -ne '
 COMMIT_MSG_STATUS="$(printf '%s\n' "$COMMIT_MSG_PARSE" | head -n1)"
 if [ "$COMMIT_MSG_STATUS" = "parsed" ]; then
   MSG="$(printf '%s\n' "$COMMIT_MSG_PARSE" | tail -n +2)"
-  if ! printf '%s' "$MSG" | grep -Eq "^$COMMIT_PREFIX"; then
+  # Anchor the prefix check to the FIRST line only. With `-0777` slurp mode,
+  # `grep -E "^..."` would otherwise match any line in a multi-line message,
+  # letting `git commit -m "garbage\nfix: pretend"` and heredoc-wrapped
+  # `$(cat <<EOF\nfix: foo\nEOF\n)` forms slip past Conventional Commits
+  # validation.
+  if ! printf '%s' "$MSG" | head -n1 | grep -Eq "^$COMMIT_PREFIX"; then
     emit_block \
       "commit message \"$MSG\" lacks the Conventional Commits prefix required by the /commit skill" \
       'invoke the /commit skill to generate a properly-formatted message'
