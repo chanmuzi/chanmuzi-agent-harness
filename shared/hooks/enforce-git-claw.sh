@@ -43,6 +43,43 @@ if [ "${ENFORCE_GIT_CLAW:-1}" = "0" ]; then
   exit 0
 fi
 
+# Build a body-stripped copy of the command for git/gh argument detection.
+# `gh issue create` and `gh pr create` may embed code examples (including
+# `git commit -m "..."`) inside body arguments; without stripping them,
+# the git detectors below would trip on documentation snippets that are
+# not actually being executed. Restrict the strip to gh issue/pr create
+# segments so that `-F` (which is also `git commit -F/--file`, a real
+# violation) is only redacted in gh contexts.
+COMMAND_NO_BODY="$(printf '%s' "$COMMAND" | perl -0777 -pe '
+  s{(\bgh\s+(?:issue|pr)\s+create\b[^|;&]*)}{
+    my $seg = $1;
+    $seg =~ s{(?<=\s)(?:--body|-b)(?:[\s=]+|(?=["\x27\S]))("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{--body REDACTED}g;
+    $seg =~ s{(?<=\s)(?:--body-file|-F)(?:[\s=]+|(?=["\x27\S]))\S+}{--body-file REDACTED}g;
+    $seg;
+  }ge;
+' 2>/dev/null)"
+if [ -z "$COMMAND_NO_BODY" ]; then
+  COMMAND_NO_BODY="$COMMAND"
+fi
+
+# Symmetric strip: a `git commit -m "..."` message may itself reference
+# `gh pr create --title ...` or `gh issue create ...` as documentation
+# (e.g. release notes that quote those commands). Without stripping, the
+# gh detectors below would falsely trigger on text inside commit messages.
+# Match the entire `git commit ...` segment, then strip every -m/--message
+# value within that segment so multi-`-m` invocations are fully covered.
+COMMAND_NO_GIT_MSG="$(printf '%s' "$COMMAND" | perl -0777 -pe '
+  s{(\bgit\s+commit\b[^|;&]*)}{
+    my $seg = $1;
+    $seg =~ s{(?<=\s)-m(?:[\s=]+|(?=["\x27\S]))("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{-m REDACTED}g;
+    $seg =~ s{(?<=\s)--message(?:[\s=]+|=)("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{--message REDACTED}g;
+    $seg;
+  }ge;
+' 2>/dev/null)"
+if [ -z "$COMMAND_NO_GIT_MSG" ]; then
+  COMMAND_NO_GIT_MSG="$COMMAND"
+fi
+
 # Conventional Commits prefix the /commit skill always produces (lowercase).
 COMMIT_PREFIX='(feat|fix|refactor|style|docs|test|perf|chore|hotfix)(\([^)]+\))?:'
 # PR title prefix the /pr skill always produces (capitalized first letter).
@@ -61,14 +98,14 @@ emit_block() {
 }
 
 # 1. Bulk staging (/commit skill forbids "git add -A", "git add .", "git add -u", "git add :/").
-if printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+add[[:space:]]+(-A|--all|-u|--update|\.|:/)([[:space:]]|$)'; then
+if printf '%s\n' "$COMMAND_NO_BODY" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+add[[:space:]]+(-A|--all|-u|--update|\.|:/)([[:space:]]|$)'; then
   emit_block \
     'bulk staging (git add -A/--all/-u/--update/./:\/) bypasses per-file staging required by the /commit skill' \
     'invoke the /commit skill instead'
 fi
 
 # 2. git commit -a combined with -m in one flag (e.g. -am, -ma, -amv, -mav).
-if printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+commit[[:space:]]+(-[[:alnum:]]*a[[:alnum:]]*m[[:alnum:]]*|-[[:alnum:]]*m[[:alnum:]]*a[[:alnum:]]*)([[:space:]]|$)'; then
+if printf '%s\n' "$COMMAND_NO_BODY" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+commit[[:space:]]+(-[[:alnum:]]*a[[:alnum:]]*m[[:alnum:]]*|-[[:alnum:]]*m[[:alnum:]]*a[[:alnum:]]*)([[:space:]]|$)'; then
   emit_block \
     'git commit -am/-ma combines staging and commit in one step, bypassing the /commit skill' \
     'invoke the /commit skill instead'
@@ -76,7 +113,7 @@ fi
 
 # 3a. git commit -F / --file reads the message from a file, fully sidestepping
 #     the /commit skill's message-generation logic.
-if printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+commit\b.*(([[:space:]]-F[[:space:]=])|([[:space:]]--file[[:space:]=]))'; then
+if printf '%s\n' "$COMMAND_NO_BODY" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+commit\b.*(([[:space:]]-F[[:space:]=])|([[:space:]]--file[[:space:]=]))'; then
   emit_block \
     'git commit -F/--file reads the message from a file, bypassing the /commit skill entirely' \
     'invoke the /commit skill instead'
@@ -86,7 +123,7 @@ fi
 #     -m"..." / -m'...' / -mword) whose message lacks the Conventional Commits
 #     prefix the /commit skill emits. If -m/--message is present but the message
 #     cannot be parsed, block anyway — we cannot verify the prefix safely.
-COMMIT_MSG_PARSE="$(printf '%s\n' "$COMMAND" | perl -ne '
+COMMIT_MSG_PARSE="$(printf '%s\n' "$COMMAND_NO_BODY" | perl -0777 -ne '
   if (/\bgit\s+commit\b[^|;&]*?\s(?:-m(?:[\s=]+|(?=["\x27\S]))|--message(?:[\s=]+|=))("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))/) {
     my $msg = defined $2 ? $2 : defined $3 ? $3 : $4;
     print "parsed\n$msg";
@@ -100,7 +137,12 @@ COMMIT_MSG_PARSE="$(printf '%s\n' "$COMMAND" | perl -ne '
 COMMIT_MSG_STATUS="$(printf '%s\n' "$COMMIT_MSG_PARSE" | head -n1)"
 if [ "$COMMIT_MSG_STATUS" = "parsed" ]; then
   MSG="$(printf '%s\n' "$COMMIT_MSG_PARSE" | tail -n +2)"
-  if ! printf '%s' "$MSG" | grep -Eq "^$COMMIT_PREFIX"; then
+  # Anchor the prefix check to the FIRST line only. With `-0777` slurp mode,
+  # `grep -E "^..."` would otherwise match any line in a multi-line message,
+  # letting `git commit -m "garbage\nfix: pretend"` and heredoc-wrapped
+  # `$(cat <<EOF\nfix: foo\nEOF\n)` forms slip past Conventional Commits
+  # validation.
+  if ! printf '%s' "$MSG" | head -n1 | grep -Eq "^$COMMIT_PREFIX"; then
     emit_block \
       "commit message \"$MSG\" lacks the Conventional Commits prefix required by the /commit skill" \
       'invoke the /commit skill to generate a properly-formatted message'
@@ -112,8 +154,8 @@ elif [ "$COMMIT_MSG_STATUS" = "found" ]; then
 fi
 
 # 4. gh pr create whose --title lacks the /pr skill prefix.
-if printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
-  TITLE="$(printf '%s\n' "$COMMAND" | perl -ne '
+if printf '%s\n' "$COMMAND_NO_GIT_MSG" | grep -Eq '(^|[;&|[:space:]])gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)'; then
+  TITLE="$(printf '%s\n' "$COMMAND_NO_GIT_MSG" | perl -0777 -ne '
     if (/\bgh\s+pr\s+create\b[^|;&]*?--title[\s=]+("([^"\\]*(?:\\.[^"\\]*)*)"|'"'"'([^'"'"']*)'"'"'|(\S+))/) {
       print defined $2 ? $2 : defined $3 ? $3 : $4;
       exit;
@@ -131,8 +173,8 @@ if printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])gh[[:space:]]+pr[[:spa
 fi
 
 # 5. gh issue create without the /issue skill body marker.
-if printf '%s\n' "$COMMAND" | grep -Eq '(^|[;&|[:space:]])gh[[:space:]]+issue[[:space:]]+create([[:space:]]|$)'; then
-  if ! printf '%s\n' "$COMMAND" | grep -Eq "$ISSUE_BODY_MARKER"; then
+if printf '%s\n' "$COMMAND_NO_GIT_MSG" | grep -Eq '(^|[;&|[:space:]])gh[[:space:]]+issue[[:space:]]+create([[:space:]]|$)'; then
+  if ! printf '%s\n' "$COMMAND_NO_GIT_MSG" | grep -Eq "$ISSUE_BODY_MARKER"; then
     emit_block \
       'gh issue create without the /issue skill body marker ("Generated with [Claude Code]")' \
       'invoke the /issue skill instead'

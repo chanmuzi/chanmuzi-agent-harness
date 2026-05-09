@@ -137,12 +137,13 @@
     }
   },
   "language": "Korean",
-  "voiceEnabled": false,
   "autoMemoryEnabled": false,
   "skipDangerousModePermissionPrompt": true,
+  "voiceEnabled": false,
   "omc": {
     "deepDive": {
       "ambiguityThreshold": 0.1
     }
-  }
+  },
+  "teammateMode": "auto"
 }
