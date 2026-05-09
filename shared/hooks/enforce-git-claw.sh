@@ -53,6 +53,15 @@ fi
 COMMAND_NO_BODY="$(printf '%s' "$COMMAND" | perl -0777 -pe '
   s{(\bgh\s+(?:issue|pr)\s+create\b[^|;&]*)}{
     my $seg = $1;
+    # Heredoc form `--body "$(cat <<TAG ... TAG\n)"` must be matched FIRST.
+    # The heredoc body may contain literal `"` chars (markdown quotes, code
+    # examples) that would prematurely close the general quoted-string
+    # regex below, leaving the rest of the body un-redacted and exposed to
+    # downstream pattern checks. The TAG-anchored pattern uses a backref to
+    # the heredoc delimiter, so it consumes the body irrespective of any
+    # `"` it contains. Tab-strip (`<<-`) and quoted (`'TAG'`/`"TAG"`)
+    # delimiter forms are also covered.
+    $seg =~ s{(?<=\s)(?:--body|-b)\s+"\$\(cat\s+<<-?\s*[\x27"]?(\w+)[\x27"]?\s*\n.*?\n[\t ]*\1[\t ]*\n\s*\)\s*"}{--body REDACTED}gs;
     $seg =~ s{(?<=\s)(?:--body|-b)(?:[\s=]+|(?=["\x27\S]))("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{--body REDACTED}g;
     $seg =~ s{(?<=\s)(?:--body-file|-F)(?:[\s=]+|(?=["\x27\S]))\S+}{--body-file REDACTED}g;
     $seg;
