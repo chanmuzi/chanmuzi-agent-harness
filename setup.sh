@@ -584,6 +584,7 @@ had_hooks = False
 had_hooks_true = False
 had_deprecated = False
 hooks_count = 0
+kept_hooks_true = False
 out = []
 
 for line in lines:
@@ -601,6 +602,9 @@ for line in lines:
         hooks_count += 1
         if re.match(r"^hooks\s*=\s*true\s*(#.*)?$", stripped):
             had_hooks_true = True
+            if not kept_hooks_true:
+                out.append(line)
+                kept_hooks_true = True
         continue
 
     if in_features and re.match(r"^codex_hooks\s*=", stripped):
@@ -615,12 +619,14 @@ if features_header_index is None:
     out.extend(["[features]\n", "hooks = true\n"])
     status = "added_section"
 else:
-    out.insert(features_header_index + 1, "hooks = true\n")
+    if not kept_hooks_true:
+        out.insert(features_header_index + 1, "hooks = true\n")
+
     if had_deprecated:
         status = "migrated"
     elif not had_hooks:
         status = "added"
-    elif had_hooks_true and hooks_count == 1:
+    elif out == lines:
         status = "unchanged"
     else:
         status = "updated"
