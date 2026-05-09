@@ -51,6 +51,26 @@ fi
 # segments so that `-F` (which is also `git commit -F/--file`, a real
 # violation) is only redacted in gh contexts.
 COMMAND_NO_BODY="$(printf '%s' "$COMMAND" | perl -0777 -pe '
+  # Pre-pass (global, no segment bounding): strip heredoc-form `--body
+  # "$(cat <<TAG\n...\nTAG\n)"`. Heredoc bodies are data, not code: they may
+  # legitimately contain command separators (`;`, `|`, `&`) and literal `"`
+  # chars (markdown, code examples) that would otherwise truncate either the
+  # outer segment regex below or the inner quoted-string regex. The TAG
+  # backreference makes the body extent unambiguous, so we redact it first
+  # and let the segment regex see a tidy `--body REDACTED` placeholder.
+  #
+  # Two alternations to mirror bash heredoc rules:
+  # - `<<-TAG`  — terminator may be preceded by zero or more TABS (no spaces)
+  # - `<<TAG`   — terminator must equal TAG exactly (no leading whitespace)
+  # In both cases trailing whitespace on the terminator line breaks closure
+  # in bash, so the regex requires `\1\n` immediately, not `\1\s*\n`.
+  # Both whitespace-separated (`--body "..."`) and equals-separated
+  # (`--body="..."`) flag forms are accepted. TAG capture is `\S+?` to admit
+  # bash-legal non-`\w` delimiters (hyphens, dots, etc.).
+  s{(?<=\s)(?:--body|-b)(?:\s+|=)"\$\(cat\s+<<-\s*[\x27"]?(\S+?)[\x27"]?\s*\n.*?\n\t*\1\n\s*\)\s*"}{--body REDACTED}gs;
+  s{(?<=\s)(?:--body|-b)(?:\s+|=)"\$\(cat\s+<<\s*[\x27"]?(\S+?)[\x27"]?\s*\n.*?\n\1\n\s*\)\s*"}{--body REDACTED}gs;
+  # Main pass: segment by `gh issue/pr create ...` (bounded by command
+  # separators) and strip plain `--body "..."` / `--body-file FILE` forms.
   s{(\bgh\s+(?:issue|pr)\s+create\b[^|;&]*)}{
     my $seg = $1;
     $seg =~ s{(?<=\s)(?:--body|-b)(?:[\s=]+|(?=["\x27\S]))("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{--body REDACTED}g;
@@ -69,6 +89,12 @@ fi
 # Match the entire `git commit ...` segment, then strip every -m/--message
 # value within that segment so multi-`-m` invocations are fully covered.
 COMMAND_NO_GIT_MSG="$(printf '%s' "$COMMAND" | perl -0777 -pe '
+  # Pre-pass (mirrors COMMAND_NO_BODY): strip heredoc-form -m/--message
+  # values globally before the segment regex bounds at command separators.
+  # Same bash-rule alternations: `<<-` allows leading tabs only, `<<` is
+  # exact. Both whitespace and equals flag forms supported.
+  s{(?<=\s)(?:-m|--message)(?:\s+|=)"\$\(cat\s+<<-\s*[\x27"]?(\S+?)[\x27"]?\s*\n.*?\n\t*\1\n\s*\)\s*"}{-m REDACTED}gs;
+  s{(?<=\s)(?:-m|--message)(?:\s+|=)"\$\(cat\s+<<\s*[\x27"]?(\S+?)[\x27"]?\s*\n.*?\n\1\n\s*\)\s*"}{-m REDACTED}gs;
   s{(\bgit\s+commit\b[^|;&]*)}{
     my $seg = $1;
     $seg =~ s{(?<=\s)-m(?:[\s=]+|(?=["\x27\S]))("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{-m REDACTED}g;
