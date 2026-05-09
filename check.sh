@@ -283,22 +283,25 @@ if command -v codex &>/dev/null; then
   log_ok "CLI: $(codex --version 2>/dev/null || echo 'found')"
   CODEX_FEATURES_OUTPUT="$(codex features list 2>/dev/null || true)"
   if [ -n "$CODEX_FEATURES_OUTPUT" ]; then
-    CODEX_HOOKS_FEATURE="$(printf '%s\n' "$CODEX_FEATURES_OUTPUT" | awk '$1 == "codex_hooks" {print $2 " " $3; exit}')"
+    CODEX_HOOKS_FEATURE="$(printf '%s\n' "$CODEX_FEATURES_OUTPUT" | awk '$1 == "hooks" || $1 == "codex_hooks" {print $1 " " $2 " " $3; exit}')"
     case "$CODEX_HOOKS_FEATURE" in
-      "stable true")
-        log_ok "codex_hooks feature: stable/enabled"
+      "hooks stable true")
+        log_ok "hooks feature: stable/enabled"
+        ;;
+      "codex_hooks stable true")
+        log_ok "codex_hooks feature: stable/enabled (legacy)"
         ;;
       "")
-        log_error "codex_hooks feature missing (upgrade @openai/codex; hooks guardrails unavailable)"
+        log_error "hooks feature missing (upgrade @openai/codex; hooks guardrails unavailable)"
         ERRORS=$((ERRORS + 1))
         ;;
       *)
-        log_error "codex_hooks feature not stable/enabled: $CODEX_HOOKS_FEATURE"
+        log_error "hooks feature not stable/enabled: $CODEX_HOOKS_FEATURE"
         ERRORS=$((ERRORS + 1))
         ;;
     esac
   else
-    log_warn "codex features list unavailable (could not verify codex_hooks support)"
+    log_warn "codex features list unavailable (could not verify hooks support)"
     WARNINGS=$((WARNINGS + 1))
   fi
 else
@@ -383,10 +386,17 @@ PYEOF
     log_ok "model_instructions_file removed"
   fi
 
-  if grep -q 'codex_hooks = true' "$CONFIG_TOML"; then
-    log_ok "codex_hooks enabled"
+  if grep -q '^[[:space:]]*hooks[[:space:]]*=[[:space:]]*true' "$CONFIG_TOML"; then
+    log_ok "hooks enabled"
+    if grep -q '^[[:space:]]*codex_hooks[[:space:]]*=' "$CONFIG_TOML"; then
+      log_warn "deprecated codex_hooks still present (setup.sh should migrate it to hooks)"
+      WARNINGS=$((WARNINGS + 1))
+    fi
+  elif grep -q '^[[:space:]]*codex_hooks[[:space:]]*=[[:space:]]*true' "$CONFIG_TOML"; then
+    log_warn "legacy codex_hooks enabled (run setup.sh to migrate to hooks)"
+    WARNINGS=$((WARNINGS + 1))
   else
-    log_warn "codex_hooks not enabled"
+    log_warn "hooks not enabled"
     WARNINGS=$((WARNINGS + 1))
   fi
 
