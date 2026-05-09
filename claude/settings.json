@@ -139,6 +139,7 @@
   "language": "Korean",
   "autoMemoryEnabled": false,
   "skipDangerousModePermissionPrompt": true,
+  "skillListingBudgetFraction": 0.015,
   "voiceEnabled": false,
   "omc": {
     "deepDive": {
