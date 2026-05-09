@@ -143,17 +143,20 @@ if [ "$COMMIT_MSG_STATUS" = "parsed" ]; then
   # letting `git commit -m "garbage\nfix: pretend"` slip past Conventional
   # Commits validation. (See PR #14.)
   #
-  # Heredoc / shell-substitution forms — `$(cat <<EOF...EOF\n)`, `$'...\n...'`,
-  # `$(printf ...)` — generate the real message at bash-substitution time, which
-  # is AFTER this PreToolUse hook runs. The captured text begins with literal
-  # `$(` or `$'`, so a strict prefix check would block every Claude Code session
-  # because the platform's built-in tool guidance recommends heredoc as the
-  # default multi-line commit form. Treat that case as "can't statically
-  # verify — trust the substitution result and let it through". The remaining
-  # checks (-F file, -am, multi-`-m` first-message parsing, gh title/body) plus
-  # the /commit skill itself still cover the intended bypass surface.
+  # Heredoc form `$(cat <<EOF...EOF\n)` — Claude Code's recommended default
+  # for multi-line commit messages — generates the real text at bash-
+  # substitution time, AFTER this PreToolUse hook runs. The captured text
+  # begins with literal `$(cat`, so a strict prefix check would block every
+  # legitimate multi-line commit. Allow only this narrow `$(cat ...)` pattern:
+  # it is the platform's documented form, and `cat` produces no side effects,
+  # keeping the bypass surface minimal. Other shell-substitution forms —
+  # `$(printf ...)`, `$'...'`, `${VAR}`, backticks — fall through to the
+  # prefix check (or are truncated by the perl `\S+` capture), preserving the
+  # /commit skill's guarantees on the dynamic-`-m` surface. (See PR #14 for
+  # the literal-newline anchor rationale, and PR #18 for the heredoc allow
+  # decision; the narrow pattern below is from PR #18 review.)
   case "$FIRST_LINE" in
-    '$('*|"\$'"*) ;;
+    '$(cat'*) ;;
     *)
       if ! printf '%s' "$FIRST_LINE" | grep -Eq "^$COMMIT_PREFIX"; then
         emit_block \
