@@ -527,7 +527,7 @@ if [ "$INSTALL_CODEX" = true ]; then
 personality = "pragmatic"
 
 [features]
-codex_hooks = true
+hooks = true
 TOML
     log_ok "created config.toml with defaults"
   fi
@@ -570,19 +570,78 @@ PYEOF
     log_skip "model_instructions_file already absent"
   fi
 
-  # 3. Enable codex_hooks feature (also fix false → true)
-  if grep -q 'codex_hooks = true' "$CONFIG_TOML"; then
-    log_skip "codex_hooks already enabled"
-  elif grep -q 'codex_hooks' "$CONFIG_TOML"; then
-    sed_inplace 's/codex_hooks = false/codex_hooks = true/' "$CONFIG_TOML"
-    log_ok "codex_hooks changed from false to true"
-  elif grep -q '^\[features\]' "$CONFIG_TOML"; then
-    sed_inplace '/^\[features\]/a\
-codex_hooks = true' "$CONFIG_TOML"
-    log_ok "added codex_hooks = true to existing [features]"
+  # 3. Enable hooks feature and migrate deprecated codex_hooks → hooks.
+  if HOOKS_FEATURE_STATUS="$(python3 - "$CONFIG_TOML" <<'PYEOF'
+import re
+import sys
+
+path = sys.argv[1]
+lines = open(path, encoding="utf-8").readlines()
+
+features_header_index = None
+in_features = False
+had_hooks = False
+had_hooks_true = False
+had_deprecated = False
+hooks_count = 0
+out = []
+
+for line in lines:
+    stripped = line.strip()
+    is_header = bool(re.match(r"^\[[^]]+\]\s*$", stripped))
+    if is_header:
+        in_features = stripped == "[features]"
+        if in_features and features_header_index is None:
+            features_header_index = len(out)
+        out.append(line)
+        continue
+
+    if in_features and re.match(r"^hooks\s*=", stripped):
+        had_hooks = True
+        hooks_count += 1
+        if re.match(r"^hooks\s*=\s*true\s*(#.*)?$", stripped):
+            had_hooks_true = True
+        continue
+
+    if in_features and re.match(r"^codex_hooks\s*=", stripped):
+        had_deprecated = True
+        continue
+
+    out.append(line)
+
+if features_header_index is None:
+    if out and out[-1].strip():
+        out.append("\n")
+    out.extend(["[features]\n", "hooks = true\n"])
+    status = "added_section"
+else:
+    out.insert(features_header_index + 1, "hooks = true\n")
+    if had_deprecated:
+        status = "migrated"
+    elif not had_hooks:
+        status = "added"
+    elif had_hooks_true and hooks_count == 1:
+        status = "unchanged"
+    else:
+        status = "updated"
+
+if out != lines:
+    open(path, "w", encoding="utf-8").writelines(out)
+
+print(status)
+PYEOF
+  )"; then
+    case "$HOOKS_FEATURE_STATUS" in
+      unchanged)     log_skip "hooks feature already enabled" ;;
+      migrated)      log_ok "migrated deprecated codex_hooks to hooks" ;;
+      updated)       log_ok "hooks feature changed to true" ;;
+      added)         log_ok "added hooks = true to existing [features]" ;;
+      added_section) log_ok "added [features] hooks = true" ;;
+      *)             log_warn "unexpected hooks feature status: $HOOKS_FEATURE_STATUS" ;;
+    esac
   else
-    printf '\n[features]\ncodex_hooks = true\n' >> "$CONFIG_TOML"
-    log_ok "added [features] codex_hooks = true"
+    log_error "failed to configure Codex hooks feature"
+    exit 1
   fi
 
   # 4. Ensure the managed top-level notify exists exactly once.
