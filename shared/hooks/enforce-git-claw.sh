@@ -137,16 +137,31 @@ COMMIT_MSG_PARSE="$(printf '%s\n' "$COMMAND_NO_BODY" | perl -0777 -ne '
 COMMIT_MSG_STATUS="$(printf '%s\n' "$COMMIT_MSG_PARSE" | head -n1)"
 if [ "$COMMIT_MSG_STATUS" = "parsed" ]; then
   MSG="$(printf '%s\n' "$COMMIT_MSG_PARSE" | tail -n +2)"
+  FIRST_LINE="$(printf '%s' "$MSG" | head -n1)"
   # Anchor the prefix check to the FIRST line only. With `-0777` slurp mode,
   # `grep -E "^..."` would otherwise match any line in a multi-line message,
-  # letting `git commit -m "garbage\nfix: pretend"` and heredoc-wrapped
-  # `$(cat <<EOF\nfix: foo\nEOF\n)` forms slip past Conventional Commits
-  # validation.
-  if ! printf '%s' "$MSG" | head -n1 | grep -Eq "^$COMMIT_PREFIX"; then
-    emit_block \
-      "commit message \"$MSG\" lacks the Conventional Commits prefix required by the /commit skill" \
-      'invoke the /commit skill to generate a properly-formatted message'
-  fi
+  # letting `git commit -m "garbage\nfix: pretend"` slip past Conventional
+  # Commits validation. (See PR #14.)
+  #
+  # Heredoc / shell-substitution forms — `$(cat <<EOF...EOF\n)`, `$'...\n...'`,
+  # `$(printf ...)` — generate the real message at bash-substitution time, which
+  # is AFTER this PreToolUse hook runs. The captured text begins with literal
+  # `$(` or `$'`, so a strict prefix check would block every Claude Code session
+  # because the platform's built-in tool guidance recommends heredoc as the
+  # default multi-line commit form. Treat that case as "can't statically
+  # verify — trust the substitution result and let it through". The remaining
+  # checks (-F file, -am, multi-`-m` first-message parsing, gh title/body) plus
+  # the /commit skill itself still cover the intended bypass surface.
+  case "$FIRST_LINE" in
+    '$('*|"\$'"*) ;;
+    *)
+      if ! printf '%s' "$FIRST_LINE" | grep -Eq "^$COMMIT_PREFIX"; then
+        emit_block \
+          "commit message \"$MSG\" lacks the Conventional Commits prefix required by the /commit skill" \
+          'invoke the /commit skill to generate a properly-formatted message'
+      fi
+      ;;
+  esac
 elif [ "$COMMIT_MSG_STATUS" = "found" ]; then
   emit_block \
     'git commit -m/--message detected but the message could not be parsed for Conventional Commits verification' \
