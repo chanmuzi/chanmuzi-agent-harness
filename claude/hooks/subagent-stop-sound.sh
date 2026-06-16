@@ -16,20 +16,22 @@ INPUT=$(cat)
 EVENT=$(echo "$INPUT" | jq -r '.hook_event_name')
 [ "$EVENT" != "SubagentStop" ] && exit 0
 
-# Debounce: collapse a burst of parallel sub-agent completions into one sound
-LAST_FILE="/tmp/claude-subagent-stop-sound-last.epoch"
-MIN_INTERVAL=5
-NOW=$(date +%s)
-LAST=$(cat "$LAST_FILE" 2>/dev/null || echo 0)
-[ $((NOW - LAST)) -lt $MIN_INTERVAL ] && exit 0
-echo "$NOW" > "$LAST_FILE"
-
 HARNESS_HOME="${CHANMUZI_AGENT_HARNESS_HOME:-}"
 if [ -z "$HARNESS_HOME" ]; then
   REAL_PATH="$(readlink -f "$0" 2>/dev/null || readlink "$0")"
   HARNESS_HOME="$(cd "$(dirname "$REAL_PATH")/../.." && pwd)"
 fi
 . "$HARNESS_HOME/shared/lib/os.sh" 2>/dev/null
+
+# Debounce: collapse a burst of parallel sub-agent completions into one sound.
+# State lives in a per-user 0700 dir (harness_state_file) to avoid the
+# predictable-/tmp symlink hazard; skip silently if a safe path can't be had.
+LAST_FILE="$(harness_state_file claude-subagent-stop-sound-last.epoch)" || exit 0
+MIN_INTERVAL=5
+NOW=$(date +%s)
+LAST=$(cat "$LAST_FILE" 2>/dev/null || echo 0)
+[ $((NOW - LAST)) -lt $MIN_INTERVAL ] && exit 0
+echo "$NOW" > "$LAST_FILE"
 
 # Glass is distinct from the main-agent Stop sound, so a delegated-work
 # completion is recognizable by ear. Falls back to terminal bell off macOS.
