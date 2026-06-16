@@ -400,10 +400,30 @@ PYEOF
     WARNINGS=$((WARNINGS + 1))
   fi
 
-  if grep -q 'profiles\.harness' "$CONFIG_TOML"; then
-    log_ok "[profiles.harness] present"
+  # Codex 0.134.0+: the harness profile lives in harness.config.toml; a legacy
+  # [profiles.harness] table in config.toml is no longer read and breaks
+  # `--profile harness`. config.toml must NOT contain it.
+  if grep -q '^\[profiles\.harness\]' "$CONFIG_TOML"; then
+    log_error "legacy [profiles.harness] still in config.toml (run setup.sh to migrate)"
+    ERRORS=$((ERRORS + 1))
   else
-    log_warn "[profiles.harness] missing"
+    log_ok "no legacy [profiles.harness] in config.toml"
+  fi
+
+  # Codex 0.134.0+ also dropped the top-level `profile = "harness"` selector;
+  # a leftover keeps the config load error firing.
+  if grep -qE '^[[:space:]]*profile[[:space:]]*=[[:space:]]*"harness"' "$CONFIG_TOML"; then
+    log_error "legacy profile = \"harness\" selector still in config.toml (run setup.sh to migrate)"
+    ERRORS=$((ERRORS + 1))
+  else
+    log_ok "no legacy profile = \"harness\" selector in config.toml"
+  fi
+
+  HARNESS_PROFILE="$CODEX_DIR/harness.config.toml"
+  if [ -f "$HARNESS_PROFILE" ] && grep -q '^personality' "$HARNESS_PROFILE"; then
+    log_ok "harness.config.toml has managed profile keys"
+  else
+    log_warn "harness.config.toml missing managed profile keys (run setup.sh)"
     WARNINGS=$((WARNINGS + 1))
   fi
 
@@ -664,10 +684,14 @@ fi
 
 PROFILE_TOML="$REPO_DIR/codex/profile.toml"
 if [ -f "$PROFILE_TOML" ]; then
+  # Codex 0.134.0+ profile files use bare top-level keys, not a [profiles.harness] header.
   if grep -q '^\[profiles\.harness\]' "$PROFILE_TOML"; then
-    log_ok "codex/profile.toml has [profiles.harness]"
+    log_warn "codex/profile.toml still uses legacy [profiles.harness] header (should be bare keys)"
+    WARNINGS=$((WARNINGS + 1))
+  elif grep -q '^personality' "$PROFILE_TOML"; then
+    log_ok "codex/profile.toml uses bare profile keys"
   else
-    log_warn "codex/profile.toml missing [profiles.harness]"
+    log_warn "codex/profile.toml has no managed profile keys"
     WARNINGS=$((WARNINGS + 1))
   fi
 

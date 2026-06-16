@@ -1,6 +1,8 @@
 # Managed by chanmuzi-agent-harness
-# setup.sh merges this [profiles.harness] block into ~/.codex/config.toml
-# Do NOT put machine-specific settings here (projects, MCP, plugins)
+# Codex 0.134.0+: the `harness` profile is a standalone file at
+# ~/.codex/harness.config.toml using bare top-level keys (NO [profiles.harness]
+# header). setup.sh syncs the keys below into that file and strips the legacy
+# [profiles.harness] table from config.toml.
+# Do NOT put machine-specific settings here (projects, MCP, plugins).
 
-[profiles.harness]
 personality = "pragmatic"
