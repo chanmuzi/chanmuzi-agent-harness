@@ -59,6 +59,13 @@ When writing prompts for Agent tool calls that involve shell execution or multi-
 - Specify the expected deliverable format so results are actionable, not just "done"
 - Prefer foreground agents when intermediate results inform your next steps
 
+### Async Work Tracking
+When you delegate to a background task, sub-agent, or separate session, do not end your turn passively "waiting for a notification." Completion signals are not guaranteed to wake you — a known Claude Code limitation where background/sub-agent completion is sometimes never injected back into the main loop, leaving you hung until the user checks manually.
+- Prefer foreground/blocking execution whenever the result informs your next step.
+- If work must run in the background, set up active tracking — a defined poll interval, a concrete verification check (exit code, output file, status command), and a fallback timeout — using `ScheduleWakeup`, `Monitor`, or the `/loop` skill. Never rely on the completion notification alone.
+- State your detection mechanism explicitly: how you will know it finished and what you will verify. "I'll wait for the notification" is not an acceptable mechanism on its own.
+- When delegated work completes, verify the actual result before acting on or reporting it.
+
 ### Significant Actions
 Before performing significant actions:
 1. Explain what you plan to do and why
