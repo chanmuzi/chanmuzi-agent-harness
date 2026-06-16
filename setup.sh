@@ -741,10 +741,79 @@ PYEOF
     log_ok "top-level notify for harness sound hook already configured"
   fi
 
-  # 5. Merge [profiles.harness] block (remove old, append new)
+  # 5. Sync the `harness` profile.
+  #    Codex 0.134.0+ resolves `--profile harness` from a standalone file
+  #    ~/.codex/harness.config.toml (bare top-level keys), and no longer reads
+  #    the legacy [profiles.harness] table in config.toml — having both triggers
+  #    a startup error. So we ensure managed keys live in harness.config.toml
+  #    and strip the legacy table from config.toml. Machine state already in
+  #    harness.config.toml (projects.*, features) is preserved.
   PROFILE_SRC="$REPO_DIR/codex/profile.toml"
+  HARNESS_PROFILE="$CODEX_DIR/harness.config.toml"
   if [ -f "$PROFILE_SRC" ]; then
-    # Remove existing [profiles.harness] block using line-by-line parsing
+    PROFILE_STATUS=$(python3 - "$PROFILE_SRC" "$HARNESS_PROFILE" <<'PYEOF'
+import os
+import sys
+
+src, dst = sys.argv[1], sys.argv[2]
+
+# Managed keys = bare top-level `key = value` lines from the source
+# (skip comments, blanks, and any [section] — profile keys are top-level only).
+managed = []
+for line in open(src):
+    s = line.strip()
+    if not s or s.startswith('#') or s.startswith('['):
+        continue
+    if '=' in s:
+        managed.append((s.split('=', 1)[0].strip(),
+                        line if line.endswith('\n') else line + '\n'))
+
+if not managed:
+    print('noop')
+    raise SystemExit
+
+dst_lines = open(dst).read().splitlines(True) if os.path.exists(dst) else []
+
+# Top-level region = everything before the first [section] header.
+first_section = len(dst_lines)
+for i, line in enumerate(dst_lines):
+    if line.strip().startswith('['):
+        first_section = i
+        break
+
+changed = False
+for key, newline in managed:
+    found = False
+    for i in range(first_section):
+        s = dst_lines[i].strip()
+        if s.startswith('#') or '=' not in s:
+            continue
+        if s.split('=', 1)[0].strip() == key:
+            found = True
+            if dst_lines[i] != newline:
+                dst_lines[i] = newline
+                changed = True
+            break
+    if not found:
+        dst_lines.insert(first_section, newline)
+        first_section += 1
+        changed = True
+
+if changed:
+    open(dst, 'w').writelines(dst_lines)
+    print('updated')
+else:
+    print('already')
+PYEOF
+)
+    case "$PROFILE_STATUS" in
+      already) log_skip "harness.config.toml profile keys already set" ;;
+      updated) log_ok "synced profile keys into harness.config.toml" ;;
+      noop)    log_warn "no managed keys found in codex/profile.toml" ;;
+      *)       log_warn "unexpected profile sync status: $PROFILE_STATUS" ;;
+    esac
+
+    # Strip any legacy [profiles.harness] table from config.toml (no re-append).
     if grep -q '^\[profiles\.harness\]' "$CONFIG_TOML"; then
       python3 - "$CONFIG_TOML" <<'PYEOF'
 import sys
@@ -764,14 +833,8 @@ while out and out[-1].strip() == '':
 out.append('\n')
 open(path, 'w').writelines(out)
 PYEOF
-      log_ok "removed old [profiles.harness] block"
+      log_ok "removed legacy [profiles.harness] from config.toml"
     fi
-
-    # Append new profile block (skip comment lines from source)
-    echo "" >> "$CONFIG_TOML"
-    grep -v '^#' "$PROFILE_SRC" | grep -v '^$' >> "$CONFIG_TOML" || true
-    echo "" >> "$CONFIG_TOML"
-    log_ok "merged [profiles.harness] from profile.toml"
   fi
 
   # 6. Trust this harness repo to avoid repeated workspace trust prompts
