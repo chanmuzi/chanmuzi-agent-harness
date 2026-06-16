@@ -410,6 +410,15 @@ PYEOF
     log_ok "no legacy [profiles.harness] in config.toml"
   fi
 
+  # Codex 0.134.0+ also dropped the top-level `profile = "harness"` selector;
+  # a leftover keeps the config load error firing.
+  if grep -qE '^[[:space:]]*profile[[:space:]]*=[[:space:]]*"harness"' "$CONFIG_TOML"; then
+    log_error "legacy profile = \"harness\" selector still in config.toml (run setup.sh to migrate)"
+    ERRORS=$((ERRORS + 1))
+  else
+    log_ok "no legacy profile = \"harness\" selector in config.toml"
+  fi
+
   HARNESS_PROFILE="$CODEX_DIR/harness.config.toml"
   if [ -f "$HARNESS_PROFILE" ] && grep -q '^personality' "$HARNESS_PROFILE"; then
     log_ok "harness.config.toml has managed profile keys"

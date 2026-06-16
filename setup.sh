@@ -813,27 +813,41 @@ PYEOF
       *)       log_warn "unexpected profile sync status: $PROFILE_STATUS" ;;
     esac
 
-    # Strip any legacy [profiles.harness] table from config.toml (no re-append).
-    if grep -q '^\[profiles\.harness\]' "$CONFIG_TOML"; then
+    # Strip legacy harness profile config from config.toml (no re-append):
+    # both the [profiles.harness] table and a top-level `profile = "harness"`
+    # selector — Codex 0.134.0+ no longer supports either, and a leftover
+    # selector keeps the load error firing. Scoped to value "harness" so an
+    # unrelated `profile = "other"` is left untouched.
+    if grep -q '^\[profiles\.harness\]' "$CONFIG_TOML" \
+       || grep -qE '^[[:space:]]*profile[[:space:]]*=[[:space:]]*"harness"' "$CONFIG_TOML"; then
       python3 - "$CONFIG_TOML" <<'PYEOF'
+import re
 import sys
+
 path = sys.argv[1]
 lines = open(path).readlines()
-out, skip = [], False
+selector = re.compile(r'^\s*profile\s*=\s*"harness"\s*(#.*)?$')
+out, skip, in_top = [], False, True
 for line in lines:
-    if line.strip() == '[profiles.harness]':
+    s = line.strip()
+    if s.startswith('[') and s.endswith(']'):
+        in_top = False  # past the top-level region
+    if s == '[profiles.harness]':
         skip = True
         continue
-    if skip and line.strip().startswith('['):
+    if skip and s.startswith('['):
         skip = False
-    if not skip:
-        out.append(line)
+    if skip:
+        continue
+    if in_top and selector.match(line):
+        continue  # drop top-level `profile = "harness"` selector
+    out.append(line)
 while out and out[-1].strip() == '':
     out.pop()
 out.append('\n')
 open(path, 'w').writelines(out)
 PYEOF
-      log_ok "removed legacy [profiles.harness] from config.toml"
+      log_ok "removed legacy harness profile config (selector/table) from config.toml"
     fi
   fi
 
