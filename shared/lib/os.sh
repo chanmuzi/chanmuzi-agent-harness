@@ -64,6 +64,33 @@ play_sound() {
   return 0
 }
 
+# Per-user private path for transient hook state (e.g. debounce timestamps).
+# Hardens against symlink/ownership attacks on a shared /tmp: the state dir is
+# created 0700 and owned by the current user, and a hijacked state path
+# (a symlink, or a file owned by someone else) is refused.
+# Usage: f="$(harness_state_file <name>)" || exit 0
+harness_state_file() {
+  local name="${1:?harness_state_file: name required}"
+  local base="${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}"
+  local dir="$base/chanmuzi-agent-harness-$(id -u)"
+
+  mkdir -p "$dir" 2>/dev/null || return 1
+  chmod 700 "$dir" 2>/dev/null || true
+  # Refuse a hijacked state dir (symlink, not a real dir, or not owned by us).
+  [ -L "$dir" ] && return 1
+  [ -d "$dir" ] || return 1
+  [ -O "$dir" ] || return 1
+
+  local f="$dir/$name"
+  # Refuse a hijacked state file (symlink, or pre-existing and owned by another).
+  [ -L "$f" ] && return 1
+  if [ -e "$f" ] && [ ! -O "$f" ]; then
+    return 1
+  fi
+
+  printf '%s\n' "$f"
+}
+
 # Symlink helper: backup existing file, create symlink
 link_file() {
   local src="$1" dst="$2"

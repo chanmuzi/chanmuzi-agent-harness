@@ -87,6 +87,17 @@
         ]
       }
     ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/subagent-stop-sound.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
     "PermissionRequest": [
       {
         "hooks": [

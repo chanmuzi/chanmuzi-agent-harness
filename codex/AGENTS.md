@@ -44,6 +44,12 @@
 - When a task has multiple logical steps, continue through the natural verification step before stopping.
 - Briefly mention remaining work only when it is genuinely outside the current request or blocked.
 
+### Async Work Tracking
+- When you start background or asynchronous work, do not passively wait on a completion notification — completion signals are not guaranteed, and you may hang until the user checks manually.
+- Prefer foreground/blocking execution whenever the result informs your next step.
+- If work must run in the background, track it with an explicit poll and a concrete verification check (exit code, output, status command) plus a fallback timeout — never rely on the notification alone.
+- State how you will detect completion and what you will verify; verify the actual result before acting on or reporting it.
+
 ## Verification
 - When modifying harness files (`setup.sh`, `check.sh`, configs, hooks), run `./setup.sh` and `./check.sh` to confirm no errors before reporting completion.
 
