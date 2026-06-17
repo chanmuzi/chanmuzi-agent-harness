@@ -33,6 +33,6 @@ LAST=$(cat "$LAST_FILE" 2>/dev/null || echo 0)
 [ $((NOW - LAST)) -lt $MIN_INTERVAL ] && exit 0
 echo "$NOW" > "$LAST_FILE"
 
-# Glass is distinct from the main-agent Stop sound, so a delegated-work
+# Frog is distinct from the main-agent Stop sound, so a delegated-work
 # completion is recognizable by ear. Falls back to terminal bell off macOS.
-play_sound "/System/Library/Sounds/Glass.aiff" 0.3
+play_sound "/System/Library/Sounds/Frog.aiff" 0.2
