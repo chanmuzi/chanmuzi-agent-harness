@@ -77,41 +77,6 @@ read_installed_ref() {
   [ -f "$1/.installed-ref" ] && cat "$1/.installed-ref" || echo ""
 }
 
-install_dev_browser_cli() {
-  if ! command -v npm >/dev/null 2>&1; then
-    log_warn "npm not found. Skipping dev-browser CLI install."
-    log_info "Install Node.js/npm first, then re-run: ./setup.sh"
-    echo ""
-    return 0
-  fi
-
-  log_section "[dev-browser] Installing CLI..."
-
-  DEV_BROWSER_OUTPUT=$(npm install -g dev-browser 2>&1) && DEV_BROWSER_EXIT=0 || DEV_BROWSER_EXIT=$?
-  if [ $DEV_BROWSER_EXIT -eq 0 ]; then
-    log_ok "dev-browser CLI installed/updated"
-  else
-    echo "$DEV_BROWSER_OUTPUT" | sed 's/^/    /'
-    log_warn "Failed to install dev-browser CLI"
-    echo ""
-    return 0
-  fi
-
-  if command -v dev-browser >/dev/null 2>&1; then
-    DEV_BROWSER_INSTALL_OUTPUT=$(dev-browser install 2>&1) && DEV_BROWSER_INSTALL_EXIT=0 || DEV_BROWSER_INSTALL_EXIT=$?
-    if [ $DEV_BROWSER_INSTALL_EXIT -eq 0 ]; then
-      log_ok "dev-browser runtime installed"
-    else
-      echo "$DEV_BROWSER_INSTALL_OUTPUT" | sed 's/^/    /'
-      log_warn "Failed to install dev-browser runtime"
-    fi
-    log_ok "dev-browser CLI ready"
-  else
-    log_warn "dev-browser CLI installed but not found in PATH"
-  fi
-  echo ""
-}
-
 sync_codex_mcp_servers() {
   local file="$1" config_toml="$2"
   [ -f "$file" ] || return 0
@@ -1096,10 +1061,6 @@ if [ "$INSTALL_OMX" = true ]; then
     fi
     echo ""
   fi
-fi
-
-if [ "$INSTALL_CLAUDE" = true ] || [ "$INSTALL_CODEX" = true ]; then
-  install_dev_browser_cli
 fi
 
 # ══════════════════════════════════════════

@@ -815,13 +815,6 @@ for dep in jq python3 node tmux; do
   fi
 done
 
-if command -v dev-browser &>/dev/null; then
-  log_ok "dev-browser: found"
-else
-  log_warn "dev-browser missing (recommended for Claude/Codex browser automation)"
-  WARNINGS=$((WARNINGS + 1))
-fi
-echo ""
 
 # ══════════════════════════════════════════
 # SUMMARY
