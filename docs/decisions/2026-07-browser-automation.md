@@ -45,6 +45,19 @@ case "$(uname -s):$(uname -m)" in
 - `claude/settings.json` — `Bash(dev-browser *)`, `Bash(npx dev-browser *)` 권한 제거
 - `codex/external-skills.json` — `sawyerhood/dev-browser` 스킬 엔트리 제거
 - `README.md` — 설치 안내 및 "프로젝트별 활성화" 섹션 제거
+- `setup.sh` — 기존 설치분을 지우는 일회성 마이그레이션(`migrate_remove_dev_browser_skill`) 추가
+- `check.sh` — 잔재 경고 추가
+
+### 함정: 선언 제거만으로는 안 지워진다
+
+`external-skills.json`에서 엔트리를 빼도 **이미 설치된 `~/.codex/skills/dev-browser`는 남는다.**
+외부 스킬 설치 로직은 선언된 항목만 순회하며 설치·갱신할 뿐, MCP 서버와 달리 **미선언 항목을 프루닝하지 않기 때문**이다.
+
+남은 `SKILL.md`는 Codex에게 브라우저 자동화 트리거를 계속 노출하고, 심지어 본문에 `npm install -g dev-browser`가 적혀 있어 **제거한 CLI를 되살리라고 안내한다.** 선언만 지웠다면 "브라우저 자동화 수단이 없다"는 이 결정이 기존 설치 환경에서 거짓이 됐을 것이다.
+
+그래서 `setup.sh`에 일회성 마이그레이션을 넣었다. `.installed-ref` 존재 여부로 가드해 하네스가 설치한 것만 지우고, 사용자가 직접 만든 동명 스킬은 건드리지 않는다.
+
+미선언 외부 스킬을 일반적으로 프루닝하는 로직(MCP 서버처럼)은 별도 설계 결정이라 이번 범위에서 제외했다.
 
 ## 결과 (중요)
 

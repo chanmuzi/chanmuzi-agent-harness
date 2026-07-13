@@ -620,6 +620,15 @@ if [ -f "$SKILLS_FILE" ]; then
   done < "$SKILLS_FILE"
 fi
 
+# dev-browser skill leftover check (support removed; see docs/decisions/2026-07-browser-automation.md)
+if [ -d "$CODEX_DIR/skills/dev-browser" ]; then
+  log_warn "skills/dev-browser still present but dev-browser support was removed — run ./setup.sh --codex"
+  WARNINGS=$((WARNINGS + 1))
+else
+  log_ok "skills/dev-browser: absent"
+fi
+echo ""
+
 # External skills check
 EXTERNAL_SKILLS_FILE="$REPO_DIR/codex/external-skills.json"
 if [ -f "$EXTERNAL_SKILLS_FILE" ] && command -v jq &>/dev/null; then

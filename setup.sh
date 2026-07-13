@@ -77,6 +77,26 @@ read_installed_ref() {
   [ -f "$1/.installed-ref" ] && cat "$1/.installed-ref" || echo ""
 }
 
+# One-off migration: drop the dev-browser skill left behind by earlier harness
+# versions. External skills are only installed/updated from external-skills.json,
+# never pruned, so removing the declaration alone would strand the skill and Codex
+# would keep discovering it (its SKILL.md even tells the agent to reinstall the CLI).
+# Guarded by .installed-ref so a hand-authored skill of the same name is never deleted.
+migrate_remove_dev_browser_skill() {
+  local skill_dir="$CODEX_DIR/skills/dev-browser"
+
+  [ -d "$skill_dir" ] || return 0
+
+  if [ ! -f "$skill_dir/.installed-ref" ]; then
+    log_warn "skills/dev-browser is not harness-managed (no .installed-ref) — leaving it in place"
+    log_info "dev-browser support was removed from this harness. Delete it manually if unwanted."
+    return 0
+  fi
+
+  rm -rf "$skill_dir"
+  log_ok "removed orphaned skills/dev-browser (dev-browser support was dropped)"
+}
+
 sync_codex_mcp_servers() {
   local file="$1" config_toml="$2"
   [ -f "$file" ] || return 0
@@ -947,6 +967,8 @@ PYEOF
       fi
       echo ""
     fi
+
+    migrate_remove_dev_browser_skill
 
     # ── External Skills (from external-skills.json) ──
     EXTERNAL_SKILLS_FILE="$REPO_DIR/codex/external-skills.json"
