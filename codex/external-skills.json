@@ -3,10 +3,5 @@
     "repo": "chanmuzi/git-claw",
     "ref": "main",
     "discover": "skills"
-  },
-  {
-    "repo": "sawyerhood/dev-browser",
-    "ref": "main",
-    "paths": ["skills/dev-browser"]
   }
 ]
