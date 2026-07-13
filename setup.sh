@@ -77,39 +77,24 @@ read_installed_ref() {
   [ -f "$1/.installed-ref" ] && cat "$1/.installed-ref" || echo ""
 }
 
-install_dev_browser_cli() {
-  if ! command -v npm >/dev/null 2>&1; then
-    log_warn "npm not found. Skipping dev-browser CLI install."
-    log_info "Install Node.js/npm first, then re-run: ./setup.sh"
-    echo ""
+# One-off migration: drop the dev-browser skill left behind by earlier harness
+# versions. External skills are only installed/updated from external-skills.json,
+# never pruned, so removing the declaration alone would strand the skill and Codex
+# would keep discovering it (its SKILL.md even tells the agent to reinstall the CLI).
+# Guarded by .installed-ref so a hand-authored skill of the same name is never deleted.
+migrate_remove_dev_browser_skill() {
+  local skill_dir="$CODEX_DIR/skills/dev-browser"
+
+  [ -d "$skill_dir" ] || return 0
+
+  if [ ! -f "$skill_dir/.installed-ref" ]; then
+    log_warn "skills/dev-browser is not harness-managed (no .installed-ref) — leaving it in place"
+    log_info "dev-browser support was removed from this harness. Delete it manually if unwanted."
     return 0
   fi
 
-  log_section "[dev-browser] Installing CLI..."
-
-  DEV_BROWSER_OUTPUT=$(npm install -g dev-browser 2>&1) && DEV_BROWSER_EXIT=0 || DEV_BROWSER_EXIT=$?
-  if [ $DEV_BROWSER_EXIT -eq 0 ]; then
-    log_ok "dev-browser CLI installed/updated"
-  else
-    echo "$DEV_BROWSER_OUTPUT" | sed 's/^/    /'
-    log_warn "Failed to install dev-browser CLI"
-    echo ""
-    return 0
-  fi
-
-  if command -v dev-browser >/dev/null 2>&1; then
-    DEV_BROWSER_INSTALL_OUTPUT=$(dev-browser install 2>&1) && DEV_BROWSER_INSTALL_EXIT=0 || DEV_BROWSER_INSTALL_EXIT=$?
-    if [ $DEV_BROWSER_INSTALL_EXIT -eq 0 ]; then
-      log_ok "dev-browser runtime installed"
-    else
-      echo "$DEV_BROWSER_INSTALL_OUTPUT" | sed 's/^/    /'
-      log_warn "Failed to install dev-browser runtime"
-    fi
-    log_ok "dev-browser CLI ready"
-  else
-    log_warn "dev-browser CLI installed but not found in PATH"
-  fi
-  echo ""
+  rm -rf "$skill_dir"
+  log_ok "removed orphaned skills/dev-browser (dev-browser support was dropped)"
 }
 
 sync_codex_mcp_servers() {
@@ -983,6 +968,8 @@ PYEOF
       echo ""
     fi
 
+    migrate_remove_dev_browser_skill
+
     # ── External Skills (from external-skills.json) ──
     EXTERNAL_SKILLS_FILE="$REPO_DIR/codex/external-skills.json"
     SKILL_LISTER="$CODEX_DIR/skills/.system/skill-installer/scripts/list-skills.py"
@@ -1096,10 +1083,6 @@ if [ "$INSTALL_OMX" = true ]; then
     fi
     echo ""
   fi
-fi
-
-if [ "$INSTALL_CLAUDE" = true ] || [ "$INSTALL_CODEX" = true ]; then
-  install_dev_browser_cli
 fi
 
 # ══════════════════════════════════════════

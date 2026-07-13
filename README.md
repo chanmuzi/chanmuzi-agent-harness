@@ -69,8 +69,6 @@ chmod +x setup.sh check.sh
 | Codex CLI | latest | `npm install -g @openai/codex` |
 | jq | any | `brew install jq` / `apt install jq` |
 
-`dev-browser`는 `setup.sh`가 자동으로 설치합니다.
-
 ## 쉘 명령어
 
 ### Claude Code
@@ -151,21 +149,6 @@ mkdir -p ~/.agents/skills/context7
 scp ~/.agents/skills/context7/SKILL.md <user>@<host>:~/.agents/skills/context7/SKILL.md
 ./setup.sh --codex && ./check.sh
 ```
-
-</details>
-
-<details>
-<summary><b>dev-browser 프로젝트별 활성화</b></summary>
-
-dev-browser는 기본 비활성 상태입니다. 프로젝트에서 필요할 때:
-
-**Claude Code** — 프로젝트 루트 `CLAUDE.md`에 추가:
-```markdown
-## Browser Automation
-브라우저 자동화가 필요하면 `dev-browser` CLI를 사용하라.
-```
-
-**Codex CLI** — 별도 설정 불필요 (SKILL.md 자동 디스커버리)
 
 </details>
 
