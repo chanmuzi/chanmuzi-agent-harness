@@ -900,6 +900,11 @@ PYEOF
   esac
   echo ""
 
+  # Runs regardless of whether the Codex CLI is installed: the orphaned skill
+  # directory exists on disk either way, and Codex would discover it as soon as
+  # it is (re)installed.
+  migrate_remove_dev_browser_skill
+
   # ── Skills ──
   if command -v codex &>/dev/null; then
     SKILL_INSTALLER="$CODEX_DIR/skills/.system/skill-installer/scripts/install-skill-from-github.py"
@@ -967,8 +972,6 @@ PYEOF
       fi
       echo ""
     fi
-
-    migrate_remove_dev_browser_skill
 
     # ── External Skills (from external-skills.json) ──
     EXTERNAL_SKILLS_FILE="$REPO_DIR/codex/external-skills.json"
