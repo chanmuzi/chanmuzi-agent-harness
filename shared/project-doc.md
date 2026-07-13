@@ -36,6 +36,13 @@ Claude Code and Codex may enter through different filenames, but they should rec
 - Agent-specific global behavior still belongs in `claude/CLAUDE.md` and `codex/AGENTS.md`
 - Do not assume a rule is shared unless it is present in the synchronized root project docs
 
+## Decision Records
+
+- Durable decisions about this harness live in `docs/decisions/`, named `YYYY-MM-<topic>.md`
+- Before adding, replacing, or removing a tool or capability, read the relevant record there first — it may already document why an option was rejected
+- Write a new record when a decision changes what this harness ships, especially when a capability is **intentionally absent**; a missing capability is invisible in the code and will otherwise be re-investigated from scratch
+- Records capture the reasoning (context, alternatives considered, consequences), not the diff; the diff belongs in the PR
+
 ## Agent Parity Policy
 
 - Claude Code and Codex CLI do not need one-to-one feature parity; their ecosystems are different
