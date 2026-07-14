@@ -394,8 +394,14 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
       done
     fi
 
-    # Install/update/remove plugins
-    INSTALLED_PLUGINS=$(claude plugin list 2>/dev/null | grep -oE '[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+' || echo "")
+    # Install/update/remove plugins.
+    # This harness only manages user-scope plugins, and `claude plugin {install,update,remove}`
+    # all default to user scope. `claude plugin list` however reports every scope, so match on
+    # the user-scope subset only — otherwise a plugin installed at project/local scope would be
+    # read as "already installed" and then fail the user-scope update, and the removal loop
+    # below would try to uninstall machine state this harness does not own.
+    INSTALLED_PLUGINS=$(claude plugin list --json 2>/dev/null \
+      | jq -r '.[] | select(.scope == "user") | .id' 2>/dev/null || echo "")
     PLUGINS=$(jq -r '.enabledPlugins // {} | keys[]' "$SETTINGS_FILE" 2>/dev/null || echo "")
 
     INSTALL_COUNT=0; UPDATE_COUNT=0; SKIP_COUNT=0; FAIL_COUNT=0
@@ -404,7 +410,7 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
         # Already installed — update it. `claude plugin update` is idempotent, so the
         # installed SHA before/after is what tells us whether anything actually moved.
         SHA_BEFORE=$(plugin_installed_sha "$plugin")
-        UPDATE_OUTPUT=$(claude plugin update "$plugin" 2>&1) && UPDATE_EXIT=0 || UPDATE_EXIT=$?
+        UPDATE_OUTPUT=$(claude plugin update "$plugin" --scope user 2>&1) && UPDATE_EXIT=0 || UPDATE_EXIT=$?
         SHA_AFTER=$(plugin_installed_sha "$plugin")
 
         if [ $UPDATE_EXIT -ne 0 ]; then
@@ -420,7 +426,7 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
         fi
       else
         log_action "$plugin ..."
-        INSTALL_OUTPUT=$(claude plugin install "$plugin" 2>&1) && INSTALL_EXIT=0 || INSTALL_EXIT=$?
+        INSTALL_OUTPUT=$(claude plugin install "$plugin" --scope user 2>&1) && INSTALL_EXIT=0 || INSTALL_EXIT=$?
         echo "$INSTALL_OUTPUT" | sed 's/^/    /'
         if [ $INSTALL_EXIT -eq 0 ] && ! echo "$INSTALL_OUTPUT" | grep -qi "fail\|error\|not found"; then
           INSTALL_COUNT=$((INSTALL_COUNT + 1))
@@ -440,7 +446,7 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
         [ -z "$installed" ] && continue
         if ! echo "$PLUGINS" | grep -qF "$installed"; then
           log_remove "removing $installed ..."
-          claude plugin remove "$installed" 2>&1 >/dev/null && \
+          claude plugin remove "$installed" --scope user 2>&1 >/dev/null && \
             log_remove "removed $installed" && REMOVE_COUNT=$((REMOVE_COUNT + 1)) || \
             log_warn "Failed to remove $installed"
         fi
