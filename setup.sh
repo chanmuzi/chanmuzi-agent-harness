@@ -77,6 +77,15 @@ read_installed_ref() {
   [ -f "$1/.installed-ref" ] && cat "$1/.installed-ref" || echo ""
 }
 
+# Commit SHA of an installed Claude plugin ("name@marketplace") at user scope.
+plugin_installed_sha() {
+  local manifest="$CLAUDE_DIR/plugins/installed_plugins.json"
+  [ -f "$manifest" ] || { echo ""; return 0; }
+  jq -r --arg p "$1" \
+    '(.plugins[$p] // []) | map(select(.scope == "user")) | .[0].gitCommitSha // ""' \
+    "$manifest" 2>/dev/null || echo ""
+}
+
 # One-off migration: drop the dev-browser skill left behind by earlier harness
 # versions. External skills are only installed/updated from external-skills.json,
 # never pruned, so removing the declaration alone would strand the skill and Codex
@@ -385,18 +394,39 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
       done
     fi
 
-    # Install/remove plugins
-    INSTALLED_PLUGINS=$(claude plugin list 2>/dev/null | grep -oE '[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+' || echo "")
+    # Install/update/remove plugins.
+    # This harness only manages user-scope plugins, and `claude plugin {install,update,remove}`
+    # all default to user scope. `claude plugin list` however reports every scope, so match on
+    # the user-scope subset only — otherwise a plugin installed at project/local scope would be
+    # read as "already installed" and then fail the user-scope update, and the removal loop
+    # below would try to uninstall machine state this harness does not own.
+    INSTALLED_PLUGINS=$(claude plugin list --json 2>/dev/null \
+      | jq -r '.[] | select(.scope == "user") | .id' 2>/dev/null || echo "")
     PLUGINS=$(jq -r '.enabledPlugins // {} | keys[]' "$SETTINGS_FILE" 2>/dev/null || echo "")
 
-    INSTALL_COUNT=0; SKIP_COUNT=0; FAIL_COUNT=0
+    INSTALL_COUNT=0; UPDATE_COUNT=0; SKIP_COUNT=0; FAIL_COUNT=0
     for plugin in $PLUGINS; do
       if echo "$INSTALLED_PLUGINS" | grep -qF "$plugin"; then
-        log_ok "$plugin (already installed)"
-        SKIP_COUNT=$((SKIP_COUNT + 1))
+        # Already installed — update it. `claude plugin update` is idempotent, so the
+        # installed SHA before/after is what tells us whether anything actually moved.
+        SHA_BEFORE=$(plugin_installed_sha "$plugin")
+        UPDATE_OUTPUT=$(claude plugin update "$plugin" --scope user 2>&1) && UPDATE_EXIT=0 || UPDATE_EXIT=$?
+        SHA_AFTER=$(plugin_installed_sha "$plugin")
+
+        if [ $UPDATE_EXIT -ne 0 ]; then
+          echo "$UPDATE_OUTPUT" | sed 's/^/    /'
+          log_warn "Failed to update $plugin"
+          FAIL_COUNT=$((FAIL_COUNT + 1))
+        elif [ -n "$SHA_BEFORE" ] && [ "$SHA_BEFORE" = "$SHA_AFTER" ]; then
+          log_ok "$plugin (up to date)"
+          SKIP_COUNT=$((SKIP_COUNT + 1))
+        else
+          log_action "$plugin (${SHA_BEFORE:0:7} → ${SHA_AFTER:0:7}) — restart Claude Code to apply"
+          UPDATE_COUNT=$((UPDATE_COUNT + 1))
+        fi
       else
         log_action "$plugin ..."
-        INSTALL_OUTPUT=$(claude plugin install "$plugin" 2>&1) && INSTALL_EXIT=0 || INSTALL_EXIT=$?
+        INSTALL_OUTPUT=$(claude plugin install "$plugin" --scope user 2>&1) && INSTALL_EXIT=0 || INSTALL_EXIT=$?
         echo "$INSTALL_OUTPUT" | sed 's/^/    /'
         if [ $INSTALL_EXIT -eq 0 ] && ! echo "$INSTALL_OUTPUT" | grep -qi "fail\|error\|not found"; then
           INSTALL_COUNT=$((INSTALL_COUNT + 1))
@@ -416,14 +446,46 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
         [ -z "$installed" ] && continue
         if ! echo "$PLUGINS" | grep -qF "$installed"; then
           log_remove "removing $installed ..."
-          claude plugin remove "$installed" 2>&1 >/dev/null && \
+          claude plugin remove "$installed" --scope user 2>&1 >/dev/null && \
             log_remove "removed $installed" && REMOVE_COUNT=$((REMOVE_COUNT + 1)) || \
             log_warn "Failed to remove $installed"
         fi
       done <<< "$INSTALLED_PLUGINS"
     fi
 
-    echo -e "  Plugins: ${GREEN}$INSTALL_COUNT new${NC}, ${DIM}$SKIP_COUNT present${NC}, ${DIM}$REMOVE_COUNT removed${NC}, ${RED}$FAIL_COUNT failed${NC}"
+    # Prune stale plugin cache versions. Claude Code keeps every version it has ever
+    # installed under plugins/cache/<marketplace>/<plugin>/<version>/ and never removes
+    # the old ones. Only the installPath recorded in installed_plugins.json is live, so
+    # anything else under the cache is dead weight — and it makes OMC patching below scan
+    # versions that are no longer loaded.
+    PLUGIN_CACHE_DIR="$CLAUDE_DIR/plugins/cache"
+    PLUGIN_MANIFEST="$CLAUDE_DIR/plugins/installed_plugins.json"
+    PRUNE_COUNT=0
+    if [ -d "$PLUGIN_CACHE_DIR" ] && [ -f "$PLUGIN_MANIFEST" ]; then
+      ACTIVE_PATHS=$(jq -r \
+        '(.plugins // {}) | to_entries[] | .value[]? | .installPath // empty' \
+        "$PLUGIN_MANIFEST" 2>/dev/null || echo "")
+
+      # Never prune on a parse failure — an empty list would delete every cached plugin.
+      if [ -z "$ACTIVE_PATHS" ]; then
+        log_warn "installed_plugins.json parsing returned empty — skipping cache prune"
+      else
+        for version_dir in "$PLUGIN_CACHE_DIR"/*/*/*; do
+          [ -d "$version_dir" ] || continue
+          if ! printf '%s\n' "$ACTIVE_PATHS" | grep -qxF "$version_dir"; then
+            if rm -rf "$version_dir"; then
+              log_remove "stale cache: ${version_dir#"$PLUGIN_CACHE_DIR"/}"
+              PRUNE_COUNT=$((PRUNE_COUNT + 1))
+            else
+              log_warn "Failed to remove stale cache: $version_dir"
+            fi
+          fi
+        done
+        [ "$PRUNE_COUNT" -eq 0 ] && log_ok "plugin cache: no stale versions"
+      fi
+    fi
+
+    echo -e "  Plugins: ${GREEN}$INSTALL_COUNT new${NC}, ${GREEN}$UPDATE_COUNT updated${NC}, ${DIM}$SKIP_COUNT up to date${NC}, ${DIM}$REMOVE_COUNT removed${NC}, ${DIM}$PRUNE_COUNT pruned${NC}, ${RED}$FAIL_COUNT failed${NC}"
   fi
   echo ""
 

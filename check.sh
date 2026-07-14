@@ -203,6 +203,58 @@ if [ -f "$SETTINGS_FILE" ] && command -v jq &>/dev/null && command -v claude >/d
     done <<< "$(printf '%b' "$STALE_MARKETPLACES")"
   fi
 fi
+
+# plugin cache: stale versions and staleness vs marketplace HEAD
+PLUGIN_MANIFEST="$CLAUDE_DIR/plugins/installed_plugins.json"
+PLUGIN_CACHE_DIR="$CLAUDE_DIR/plugins/cache"
+if [ -f "$PLUGIN_MANIFEST" ] && command -v jq &>/dev/null; then
+  ACTIVE_PATHS="$(jq -r \
+    '(.plugins // {}) | to_entries[] | .value[]? | .installPath // empty' \
+    "$PLUGIN_MANIFEST" 2>/dev/null || true)"
+
+  if [ -z "$ACTIVE_PATHS" ]; then
+    log_error "installed_plugins.json: failed to parse installed plugins"
+    ERRORS=$((ERRORS + 1))
+  else
+    STALE_CACHE=0
+    if [ -d "$PLUGIN_CACHE_DIR" ]; then
+      for version_dir in "$PLUGIN_CACHE_DIR"/*/*/*; do
+        [ -d "$version_dir" ] || continue
+        if ! printf '%s\n' "$ACTIVE_PATHS" | grep -qxF "$version_dir"; then
+          log_warn "stale plugin cache: ${version_dir#"$PLUGIN_CACHE_DIR"/} (run ./setup.sh)"
+          WARNINGS=$((WARNINGS + 1))
+          STALE_CACHE=$((STALE_CACHE + 1))
+        fi
+      done
+    fi
+    [ "$STALE_CACHE" -eq 0 ] && log_ok "plugin cache: no stale versions"
+
+    # Freshness check, limited to plugins pinned to a raw commit SHA (no semver release).
+    # For those the marketplace clone's HEAD is the correct "latest" baseline. Versioned
+    # plugins (e.g. 4.9.0) resolve through releases, so HEAD would report false staleness.
+    while IFS=$'\t' read -r plugin_id plugin_version plugin_sha; do
+      [ -z "$plugin_id" ] && continue
+      case "$plugin_version" in
+        *[!0-9a-f]*|"") continue ;;  # not a raw SHA — versioned release, skip
+      esac
+      mp_name="${plugin_id##*@}"
+      mp_dir="$CLAUDE_DIR/plugins/marketplaces/$mp_name"
+      [ -d "$mp_dir/.git" ] || continue
+      mp_head="$(git -C "$mp_dir" rev-parse HEAD 2>/dev/null || true)"
+      [ -z "$mp_head" ] && continue
+      if [ "$plugin_sha" = "$mp_head" ]; then
+        log_ok "plugin $plugin_id: up to date (${plugin_sha:0:7})"
+      else
+        log_warn "plugin $plugin_id: outdated (${plugin_sha:0:7} → ${mp_head:0:7}) — run ./setup.sh"
+        WARNINGS=$((WARNINGS + 1))
+      fi
+    done <<< "$(jq -r \
+      '(.plugins // {}) | to_entries[] | .key as $id | .value[]
+       | select(.scope == "user")
+       | [$id, (.version // ""), (.gitCommitSha // "")] | @tsv' \
+      "$PLUGIN_MANIFEST" 2>/dev/null || true)"
+  fi
+fi
 echo ""
 
 # project doc sync check
