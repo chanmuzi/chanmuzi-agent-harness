@@ -88,22 +88,43 @@ fi
 # gh detectors below would falsely trigger on text inside commit messages.
 # Match the entire `git commit ...` segment, then strip every -m/--message
 # value within that segment so multi-`-m` invocations are fully covered.
-COMMAND_NO_GIT_MSG="$(printf '%s' "$COMMAND" | perl -0777 -pe '
-  # Pre-pass (mirrors COMMAND_NO_BODY): strip heredoc-form -m/--message
-  # values globally before the segment regex bounds at command separators.
-  # Same bash-rule alternations: `<<-` allows leading tabs only, `<<` is
-  # exact. Both whitespace and equals flag forms supported.
-  s{(?<=\s)(?:-m|--message)(?:\s+|=)"\$\(cat\s+<<-\s*[\x27"]?(\S+?)[\x27"]?\s*\n.*?\n\t*\1\n\s*\)\s*"}{-m REDACTED}gs;
-  s{(?<=\s)(?:-m|--message)(?:\s+|=)"\$\(cat\s+<<\s*[\x27"]?(\S+?)[\x27"]?\s*\n.*?\n\1\n\s*\)\s*"}{-m REDACTED}gs;
-  s{(\bgit\s+commit\b[^|;&]*)}{
-    my $seg = $1;
-    $seg =~ s{(?<=\s)-m(?:[\s=]+|(?=["\x27\S]))("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{-m REDACTED}g;
-    $seg =~ s{(?<=\s)--message(?:[\s=]+|=)("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{--message REDACTED}g;
-    $seg;
-  }ge;
-' 2>/dev/null)"
+#
+# Factored into a function so the two derivations below share one regex and
+# cannot drift apart: COMMAND_NO_GIT_MSG (from raw $COMMAND, used by the gh
+# detectors, which must still see gh bodies) and COMMAND_NO_BODY_NO_MSG (from
+# the gh-body-stripped copy, used by check 3a — see there for why).
+strip_git_commit_msg() {
+  printf '%s' "$1" | perl -0777 -pe '
+    # Pre-pass (mirrors COMMAND_NO_BODY): strip heredoc-form -m/--message
+    # values globally before the segment regex bounds at command separators.
+    # Same bash-rule alternations: `<<-` allows leading tabs only, `<<` is
+    # exact. Both whitespace and equals flag forms supported.
+    s{(?<=\s)(?:-m|--message)(?:\s+|=)"\$\(cat\s+<<-\s*[\x27"]?(\S+?)[\x27"]?\s*\n.*?\n\t*\1\n\s*\)\s*"}{-m REDACTED}gs;
+    s{(?<=\s)(?:-m|--message)(?:\s+|=)"\$\(cat\s+<<\s*[\x27"]?(\S+?)[\x27"]?\s*\n.*?\n\1\n\s*\)\s*"}{-m REDACTED}gs;
+    s{(\bgit\s+commit\b[^|;&]*)}{
+      my $seg = $1;
+      $seg =~ s{(?<=\s)-m(?:[\s=]+|(?=["\x27\S]))("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{-m REDACTED}g;
+      $seg =~ s{(?<=\s)--message(?:[\s=]+|=)("([^"\\]*(?:\\.[^"\\]*)*)"|\x27([^\x27]*)\x27|(\S+))}{--message REDACTED}g;
+      $seg;
+    }ge;
+  ' 2>/dev/null
+}
+COMMAND_NO_GIT_MSG="$(strip_git_commit_msg "$COMMAND")"
 if [ -z "$COMMAND_NO_GIT_MSG" ]; then
   COMMAND_NO_GIT_MSG="$COMMAND"
+fi
+
+# For check 3a only: strip gh bodies FIRST (COMMAND_NO_BODY), THEN commit
+# messages. check 3a hunts for a real `git commit -F/--file` flag, which never
+# appears inside a gh --body or a commit message — so both must be redacted, or
+# a literal "git commit -F"/"--file" quoted as a code example inside a PR/issue
+# body (or a commit message) is mistaken for a real flag and legitimate work is
+# blocked. COMMAND_NO_GIT_MSG alone strips only messages, not gh bodies, so it
+# cannot be reused here; the gh detectors (checks 4/5) conversely need the gh
+# body intact, so they must keep COMMAND_NO_GIT_MSG.
+COMMAND_NO_BODY_NO_MSG="$(strip_git_commit_msg "$COMMAND_NO_BODY")"
+if [ -z "$COMMAND_NO_BODY_NO_MSG" ]; then
+  COMMAND_NO_BODY_NO_MSG="$COMMAND_NO_BODY"
 fi
 
 # Conventional Commits prefix the /commit skill always produces (lowercase).
@@ -138,8 +159,15 @@ if printf '%s\n' "$COMMAND_NO_BODY" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]
 fi
 
 # 3a. git commit -F / --file reads the message from a file, fully sidestepping
-#     the /commit skill's message-generation logic.
-if printf '%s\n' "$COMMAND_NO_BODY" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+commit\b.*(([[:space:]]-F[[:space:]=])|([[:space:]]--file[[:space:]=]))'; then
+#     the /commit skill's message-generation logic. Match against
+#     COMMAND_NO_BODY_NO_MSG (gh bodies AND commit messages stripped): the
+#     -F/--file flag is never inside a gh --body or a -m message, so redacting
+#     both removes false positives where the literal text "-F"/"--file" appears
+#     as a code example in a PR/issue body or a commit message (e.g.
+#     -m "docs: ... -F 차단 ...", or a `git commit --file` example in a PR body)
+#     while still catching a real `git commit -F file` flag, which both strips
+#     leave intact.
+if printf '%s\n' "$COMMAND_NO_BODY_NO_MSG" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+commit\b.*(([[:space:]]-F[[:space:]=])|([[:space:]]--file[[:space:]=]))'; then
   emit_block \
     'git commit -F/--file reads the message from a file, bypassing the /commit skill entirely' \
     'invoke the /commit skill instead'
