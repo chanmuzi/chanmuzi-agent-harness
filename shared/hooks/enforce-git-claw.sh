@@ -138,8 +138,13 @@ if printf '%s\n' "$COMMAND_NO_BODY" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]
 fi
 
 # 3a. git commit -F / --file reads the message from a file, fully sidestepping
-#     the /commit skill's message-generation logic.
-if printf '%s\n' "$COMMAND_NO_BODY" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+commit\b.*(([[:space:]]-F[[:space:]=])|([[:space:]]--file[[:space:]=]))'; then
+#     the /commit skill's message-generation logic. Match against
+#     COMMAND_NO_GIT_MSG (not COMMAND_NO_BODY): the -F/--file flag is never
+#     inside a -m message, so stripping the commit message first removes false
+#     positives where the literal text "-F"/"--file" appears in the message
+#     body (e.g. -m "docs: ... -F 차단 ...") while still catching a real
+#     `git commit -F file` flag, which COMMAND_NO_GIT_MSG leaves intact.
+if printf '%s\n' "$COMMAND_NO_GIT_MSG" | grep -Eq '(^|[;&|[:space:]])git[[:space:]]+commit\b.*(([[:space:]]-F[[:space:]=])|([[:space:]]--file[[:space:]=]))'; then
   emit_block \
     'git commit -F/--file reads the message from a file, bypassing the /commit skill entirely' \
     'invoke the /commit skill instead'
