@@ -257,46 +257,30 @@ if [ -f "$PLUGIN_MANIFEST" ] && command -v jq &>/dev/null; then
 fi
 echo ""
 
-# project doc sync check
-PROJECT_DOC_RENDERER="$REPO_DIR/shared/render_project_docs.py"
-if [ -f "$PROJECT_DOC_RENDERER" ]; then
-  PROJECT_DOC_STDOUT_FILE="$(mktemp)"
-  PROJECT_DOC_STDERR_FILE="$(mktemp)"
-  if python3 "$PROJECT_DOC_RENDERER" --check >"$PROJECT_DOC_STDOUT_FILE" 2>"$PROJECT_DOC_STDERR_FILE"; then
-    PROJECT_DOC_RENDER_STATUS=0
-  else
-    PROJECT_DOC_RENDER_STATUS=$?
-  fi
-  PROJECT_DOC_CHECK_OUTPUT="$(cat "$PROJECT_DOC_STDOUT_FILE")"
-  PROJECT_DOC_CHECK_STDERR="$(cat "$PROJECT_DOC_STDERR_FILE")"
-  rm -f "$PROJECT_DOC_STDOUT_FILE" "$PROJECT_DOC_STDERR_FILE"
-
-  if [ "$PROJECT_DOC_RENDER_STATUS" -ne 0 ]; then
-    log_warn "project doc renderer failed: shared/render_project_docs.py --check"
-    WARNINGS=$((WARNINGS + 1))
-    while IFS= read -r line; do
-      [ -z "$line" ] && continue
-      log_warn "project doc renderer stderr: $line"
-      WARNINGS=$((WARNINGS + 1))
-    done <<< "$PROJECT_DOC_CHECK_STDERR"
-  elif [ -z "$PROJECT_DOC_CHECK_OUTPUT" ]; then
-    log_ok "project docs: CLAUDE.md and AGENTS.md are synchronized"
-  else
-    while IFS= read -r line; do
-      [ -z "$line" ] && continue
-      doc_name="${line#out_of_sync:}"
-      log_warn "project doc $doc_name is out of sync with shared/project-doc.md"
-      WARNINGS=$((WARNINGS + 1))
-    done <<< "$PROJECT_DOC_CHECK_OUTPUT"
-  fi
-else
-  log_warn "project doc renderer missing: shared/render_project_docs.py"
+# project doc adapter check: AGENTS.md is canonical, CLAUDE.md is a one-line @AGENTS.md adapter
+if [ ! -f "$REPO_DIR/AGENTS.md" ]; then
+  log_warn "project doc missing: root AGENTS.md (canonical project doc)"
   WARNINGS=$((WARNINGS + 1))
+else
+  log_ok "project docs: root AGENTS.md present (canonical)"
+fi
+
+if [ ! -f "$REPO_DIR/CLAUDE.md" ]; then
+  log_warn "project doc missing: root CLAUDE.md (adapter)"
+  WARNINGS=$((WARNINGS + 1))
+else
+  CLAUDE_ADAPTER_FIRST_LINE="$(head -n 1 "$REPO_DIR/CLAUDE.md")"
+  if [ "$CLAUDE_ADAPTER_FIRST_LINE" = "@AGENTS.md" ]; then
+    log_ok "project docs: root CLAUDE.md is an @AGENTS.md adapter"
+  else
+    log_warn "project doc CLAUDE.md is not an adapter: first line must be exactly '@AGENTS.md'"
+    WARNINGS=$((WARNINGS + 1))
+  fi
 fi
 echo ""
 
 # parity policy checks
-check_contains "$REPO_DIR/shared/project-doc.md" "## Agent Parity Policy" "project docs: Agent Parity Policy"
+check_contains "$REPO_DIR/AGENTS.md" "## Agent Parity Policy" "project docs: Agent Parity Policy"
 check_contains "$REPO_DIR/claude/CLAUDE.md" "Verify Before Acting or Reporting" "claude global doc: verify policy"
 check_contains "$REPO_DIR/claude/CLAUDE.md" "Error Handling Integrity" "claude global doc: error policy"
 check_contains "$REPO_DIR/claude/CLAUDE.md" 'Use `/commit`, `/pr`, `/pr release`, `/review` skills' "claude global doc: git workflow policy"
@@ -304,26 +288,26 @@ check_contains "$REPO_DIR/codex/AGENTS.md" "Verify Before Acting or Reporting" "
 check_contains "$REPO_DIR/codex/AGENTS.md" "Error Handling Integrity" "codex global doc: error policy"
 check_contains "$REPO_DIR/codex/AGENTS.md" "managed git workflow skills" "codex global doc: git workflow policy"
 
-TEMPLATE_PARITY_STATUS=$(python3 - "$REPO_DIR/templates/AGENTS.md" "$REPO_DIR/templates/CLAUDE.md" <<'PYEOF'
-import sys
-from pathlib import Path
+# templates follow the same adapter scheme: AGENTS.md canonical, CLAUDE.md = @AGENTS.md adapter
+if [ ! -f "$REPO_DIR/templates/AGENTS.md" ]; then
+  log_error "templates: AGENTS.md missing (canonical template)"
+  ERRORS=$((ERRORS + 1))
+else
+  log_ok "templates: AGENTS.md present (canonical)"
+fi
 
-agents = Path(sys.argv[1])
-claude = Path(sys.argv[2])
-if not agents.exists() or not claude.exists():
-    print("missing")
-    raise SystemExit
-
-agents_body = "\n".join(agents.read_text(encoding="utf-8").splitlines()[1:])
-claude_body = "\n".join(claude.read_text(encoding="utf-8").splitlines()[1:])
-print("ok" if agents_body == claude_body else "diff")
-PYEOF
-)
-case "$TEMPLATE_PARITY_STATUS" in
-  ok)      log_ok "templates: AGENTS.md and CLAUDE.md bodies match" ;;
-  missing) log_error "templates: AGENTS.md or CLAUDE.md missing"; ERRORS=$((ERRORS + 1)) ;;
-  *)       log_warn "templates: AGENTS.md and CLAUDE.md bodies differ"; WARNINGS=$((WARNINGS + 1)) ;;
-esac
+if [ ! -f "$REPO_DIR/templates/CLAUDE.md" ]; then
+  log_error "templates: CLAUDE.md missing (adapter template)"
+  ERRORS=$((ERRORS + 1))
+else
+  TEMPLATE_ADAPTER_FIRST_LINE="$(head -n 1 "$REPO_DIR/templates/CLAUDE.md")"
+  if [ "$TEMPLATE_ADAPTER_FIRST_LINE" = "@AGENTS.md" ]; then
+    log_ok "templates: CLAUDE.md is an @AGENTS.md adapter"
+  else
+    log_warn "templates: CLAUDE.md is not an adapter: first line must be exactly '@AGENTS.md'"
+    WARNINGS=$((WARNINGS + 1))
+  fi
+fi
 echo ""
 
 # ══════════════════════════════════════════
