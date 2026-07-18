@@ -97,12 +97,12 @@ chmod +x setup.sh check.sh
 ## Agent parity 정책
 
 Claude Code와 Codex CLI의 플러그인/스킬 생태계는 다르므로 완전한 1:1 매핑을 목표로 하지 않습니다.
-대신 안전장치, git workflow, 검증 규칙, 프로젝트 문서 동기화는 양쪽에서 같은 수준으로 유지합니다.
+대신 안전장치, git workflow, 검증 규칙, 프로젝트 문서 정본 관리는 양쪽에서 같은 수준으로 유지합니다.
 
 - 공통으로 강제할 수 있는 guardrail은 `shared/hooks/`에 둡니다.
 - 한쪽에만 있는 플러그인/스킬은 의도된 차이인지 확인하고, `check.sh`나 문서에 드러나게 관리합니다.
-- 루트 `CLAUDE.md`와 `AGENTS.md`는 `shared/project-doc.md`에서 렌더링해 항상 동기화합니다.
-- 프로젝트 템플릿은 `templates/CLAUDE.md`와 `templates/AGENTS.md`를 쌍으로 유지합니다.
+- 프로젝트 문서 정본은 루트 `AGENTS.md` 하나입니다. 루트 `CLAUDE.md`는 `@AGENTS.md` 한 줄 adapter로 같은 규칙을 import합니다.
+- 프로젝트 템플릿도 같은 구조입니다: `templates/AGENTS.md`(정본) + `templates/CLAUDE.md`(adapter).
 - Codex hooks는 `hooks` 기능이 stable/enabled 상태인지 `check.sh`에서 검증합니다.
 
 ## 보안 모델

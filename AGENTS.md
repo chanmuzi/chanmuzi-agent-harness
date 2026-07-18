@@ -1,21 +1,20 @@
 # AGENTS.md
 
-<!-- Generated from shared/project-doc.md via shared/render_project_docs.py. -->
-
 # Project-Level Instructions
 
 This repo is `chanmuzi-agent-harness` — a unified harness for Claude Code and Codex CLI configuration.
 
-Within this repository, the project-level `CLAUDE.md` and `AGENTS.md` must stay aligned.
-Claude Code and Codex may enter through different filenames, but they should receive the same repository rules here.
+This file is the single canonical project doc (SSoT) for this repository.
+Codex reads it directly; Claude Code enters through root `CLAUDE.md`, which imports this file via `@AGENTS.md`.
+Both agents receive the same repository rules here.
 
 ## Structure
 
-- `shared/` contains cross-platform helpers, shell functions, common hooks, and shared project-doc sources
+- `shared/` contains cross-platform helpers, shell functions, and common hooks
 - `claude/` contains Claude Code config sources for `~/.claude/`
 - `codex/` contains Codex CLI config sources for `~/.codex/`
 - `setup.sh` installs symlinks, patches Codex config, and installs agent extras
-- `check.sh` verifies symlinks, config patches, doc sync, and required dependencies
+- `check.sh` verifies symlinks, config patches, the project-doc adapter, and required dependencies
 
 ## Repository Rules
 
@@ -34,11 +33,12 @@ Claude Code and Codex may enter through different filenames, but they should rec
 
 ## Project Doc Policy
 
-- Root `CLAUDE.md` and root `AGENTS.md` are intentionally synchronized project docs for this repository
-- The canonical shared content lives in `shared/project-doc.md`
-- If project-level rules change, regenerate both root docs instead of editing only one
+- Root `AGENTS.md` (this file) is the single canonical project doc for this repository
+- Root `CLAUDE.md` is a one-line adapter (`@AGENTS.md`) so Claude Code imports the same rules — never duplicate shared content there
+- If a Claude-only project rule is ever needed, add it below the import line in `CLAUDE.md`; everything shared belongs here
+- Agent sessions should start at the repository root; per-directory child docs and `AGENTS.override.md` files are not used in this repository
 - Agent-specific global behavior still belongs in `claude/CLAUDE.md` and `codex/AGENTS.md`
-- Do not assume a rule is shared unless it is present in the synchronized root project docs
+- Rationale and loading-model details: `docs/decisions/2026-07-agent-instruction-loading.md`
 
 ## Decision Records
 
@@ -60,7 +60,7 @@ Claude Code and Codex may enter through different filenames, but they should rec
 
 When modifying `setup.sh`, `check.sh`, hooks, project docs, or config files:
 
-1. Regenerate the root project docs if the shared project doc changed
+1. If project rules changed, edit root `AGENTS.md` only — `CLAUDE.md` stays a single `@AGENTS.md` adapter line
 2. Run `./setup.sh` or the relevant agent-specific setup command
 3. Run `./check.sh`
 4. Only report completion after the checks reflect the final state
