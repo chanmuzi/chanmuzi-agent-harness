@@ -6,15 +6,34 @@ export ENABLE_EXPERIMENTAL_MCP_CLI='true'
 
 # ── Claude Code ──
 
+# Resolve the git root of the current directory (empty when not in a git repo).
+# Claude sessions must start at the repo root: root CLAUDE.md is an @AGENTS.md
+# adapter, and subdirectory starts may skip the parent import expansion.
+# See docs/decisions/2026-07-agent-instruction-loading.md
+_claude_launch_dir() {
+  git rev-parse --show-toplevel 2>/dev/null || pwd
+}
+
 # Default: skip permissions (hooks provide safety guardrails)
 # env -u TMUX: workaround for Claude Code 256-color downgrade in tmux
 # See: https://github.com/anthropics/claude-code/issues/36785
+# Runs in a subshell at the git root so the caller's cwd is untouched.
 claude() {
-  command env -u TMUX claude --dangerously-skip-permissions "$@"
+  local launch_dir
+  launch_dir="$(_claude_launch_dir)"
+  if [ "$launch_dir" != "$PWD" ]; then
+    echo "[harness] Claude 세션을 git 루트에서 시작합니다: $launch_dir" >&2
+  fi
+  ( cd "$launch_dir" && command env -u TMUX claude --dangerously-skip-permissions "$@" )
 }
 
 claude-safe() {
-  command env -u TMUX claude "$@"
+  local launch_dir
+  launch_dir="$(_claude_launch_dir)"
+  if [ "$launch_dir" != "$PWD" ]; then
+    echo "[harness] Claude 세션을 git 루트에서 시작합니다: $launch_dir" >&2
+  fi
+  ( cd "$launch_dir" && command env -u TMUX claude "$@" )
 }
 
 claude-team() {
