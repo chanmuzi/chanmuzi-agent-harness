@@ -36,6 +36,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(resolve_path "$SCRIPT_DIR")"
 REPO_DIR="${REPO_DIR%/.}"
 CLAUDE_DIR="$HOME/.claude"
+# Work account (chanmuzi@upstage.ai) config dir, selected by CLAUDE_CONFIG_DIR
+# in the cc-up shell function. Shares the same harness config as the personal
+# account. See docs/decisions/2026-07-multi-account-claude-config.md
+CLAUDE_UP_DIR="$HOME/.claude-upstage"
 CODEX_DIR="$HOME/.codex"
 AGENTS_DIR="$HOME/.agents"
 CODEX_MCP_FILE="$REPO_DIR/codex/mcp-servers.json"
@@ -52,6 +56,31 @@ link_shared_skill_if_present() {
     log_info "This is non-fatal. Other setup steps continue."
     log_info "Create ~/.agents/skills/$skill_name and place SKILL.md there, then re-run: ./setup.sh --codex"
   fi
+}
+
+# Install the harness symlinks into one Claude config directory.
+# Called once per account so the personal and work accounts share identical
+# settings, hooks, commands, and global CLAUDE.md.
+# $1: target config dir (e.g. ~/.claude or ~/.claude-upstage)
+link_claude_config() {
+  local target_dir="$1"
+
+  mkdir -p "$target_dir/hooks" "$target_dir/commands"
+
+  link_file "$REPO_DIR/claude/CLAUDE.md"       "$target_dir/CLAUDE.md"
+  link_file "$REPO_DIR/claude/settings.json"   "$target_dir/settings.json"
+  link_file "$REPO_DIR/claude/statusline.sh"   "$target_dir/statusline.sh"
+
+  for hook in "$REPO_DIR"/claude/hooks/*.sh; do
+    [ -f "$hook" ] || continue
+    ensure_executable "$hook"
+    link_file "$hook" "$target_dir/hooks/$(basename "$hook")"
+  done
+
+  for cmd in "$REPO_DIR"/claude/commands/*.md; do
+    [ -f "$cmd" ] || continue
+    link_file "$cmd" "$target_dir/commands/$(basename "$cmd")"
+  done
 }
 
 ensure_executable() {
@@ -278,29 +307,22 @@ if [ "$INSTALL_CLAUDE" = true ]; then
     echo ""
   fi
 
-  mkdir -p "$CLAUDE_DIR/hooks" "$CLAUDE_DIR/commands"
-
   log_section "  Hook Permissions..."
   ensure_executable "$REPO_DIR/shared/hooks/block-no-verify.sh"
   ensure_executable "$REPO_DIR/shared/hooks/guard-destructive-git.sh"
   ensure_executable "$REPO_DIR/shared/hooks/enforce-git-claw.sh"
 
   # ── Symlinks ──
-  log_section "  Symlinks..."
-  link_file "$REPO_DIR/claude/CLAUDE.md"       "$CLAUDE_DIR/CLAUDE.md"
-  link_file "$REPO_DIR/claude/settings.json"   "$CLAUDE_DIR/settings.json"
-  link_file "$REPO_DIR/claude/statusline.sh"   "$CLAUDE_DIR/statusline.sh"
+  log_section "  Symlinks (personal: ~/.claude)..."
+  link_claude_config "$CLAUDE_DIR"
+  echo ""
 
-  for hook in "$REPO_DIR"/claude/hooks/*.sh; do
-    [ -f "$hook" ] || continue
-    ensure_executable "$hook"
-    link_file "$hook" "$CLAUDE_DIR/hooks/$(basename "$hook")"
-  done
-
-  for cmd in "$REPO_DIR"/claude/commands/*.md; do
-    [ -f "$cmd" ] || continue
-    link_file "$cmd" "$CLAUDE_DIR/commands/$(basename "$cmd")"
-  done
+  log_section "  Symlinks (work: ~/.claude-upstage)..."
+  link_claude_config "$CLAUDE_UP_DIR"
+  # Plugins are installed into the personal dir only. Share the whole directory
+  # so both accounts see the same plugins without duplicating the cache.
+  mkdir -p "$CLAUDE_DIR/plugins"
+  link_file "$CLAUDE_DIR/plugins" "$CLAUDE_UP_DIR/plugins"
   echo ""
 
   # ── Plugins ──
@@ -1274,7 +1296,7 @@ else
 fi
 
 if ! command -v tmux &>/dev/null; then
-  log_warn "tmux not installed (required by claude-team / omx team mode)"
+  log_warn "tmux not installed (required by omx team mode)"
 else
   log_ok "tmux: $(tmux -V)"
 fi
