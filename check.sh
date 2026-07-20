@@ -9,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(resolve_path "$SCRIPT_DIR")"
 REPO_DIR="${REPO_DIR%/.}"
 CLAUDE_DIR="$HOME/.claude"
+CLAUDE_UP_DIR="$HOME/.claude-upstage"
 CODEX_DIR="$HOME/.codex"
 AGENTS_DIR="$HOME/.agents"
 CODEX_MCP_FILE="$REPO_DIR/codex/mcp-servers.json"
@@ -104,14 +105,37 @@ else
   WARNINGS=$((WARNINGS + 1))
 fi
 
-check_symlink "$CLAUDE_DIR/CLAUDE.md"     "$REPO_DIR/claude/CLAUDE.md"     "CLAUDE.md"
-check_symlink "$CLAUDE_DIR/settings.json" "$REPO_DIR/claude/settings.json" "settings.json"
-check_symlink "$CLAUDE_DIR/statusline.sh" "$REPO_DIR/claude/statusline.sh" "statusline.sh"
+# Verify the harness symlinks in one Claude config directory.
+# $1: target config dir, $2: label prefix shown in the report
+check_claude_config() {
+  local target_dir="$1" label="$2" name hook cmd
+
+  check_symlink "$target_dir/CLAUDE.md"     "$REPO_DIR/claude/CLAUDE.md"     "$label CLAUDE.md"
+  check_symlink "$target_dir/settings.json" "$REPO_DIR/claude/settings.json" "$label settings.json"
+  check_symlink "$target_dir/statusline.sh" "$REPO_DIR/claude/statusline.sh" "$label statusline.sh"
+
+  for hook in "$REPO_DIR"/claude/hooks/*.sh; do
+    [ -f "$hook" ] || continue
+    name="$(basename "$hook")"
+    check_symlink "$target_dir/hooks/$name" "$hook" "$label hooks/$name"
+  done
+
+  for cmd in "$REPO_DIR"/claude/commands/*.md; do
+    [ -f "$cmd" ] || continue
+    name="$(basename "$cmd")"
+    check_symlink "$target_dir/commands/$name" "$cmd" "$label commands/$name"
+  done
+}
+
+check_claude_config "$CLAUDE_DIR"    "[personal]"
+check_claude_config "$CLAUDE_UP_DIR" "[work]"
+
+# Work account shares the personal plugin directory (see decision record)
+check_symlink "$CLAUDE_UP_DIR/plugins" "$CLAUDE_DIR/plugins" "[work] plugins"
 
 for hook in "$REPO_DIR"/claude/hooks/*.sh; do
   [ -f "$hook" ] || continue
   name="$(basename "$hook")"
-  check_symlink "$CLAUDE_DIR/hooks/$name" "$hook" "hooks/$name"
   if [ -x "$hook" ]; then
     log_ok "repo hook executable: claude/hooks/$name"
   else
@@ -141,11 +165,6 @@ else
   ERRORS=$((ERRORS + 1))
 fi
 
-for cmd in "$REPO_DIR"/claude/commands/*.md; do
-  [ -f "$cmd" ] || continue
-  name="$(basename "$cmd")"
-  check_symlink "$CLAUDE_DIR/commands/$name" "$cmd" "commands/$name"
-done
 
 # extraKnownMarketplaces path residue check
 SETTINGS_FILE="$REPO_DIR/claude/settings.json"
@@ -824,7 +843,7 @@ echo ""
 
 if jq -e '
   (.hooks.PreToolUse // []) |
-  any(.matcher == "Bash" and any(.hooks[]?; .command == "bash ~/.claude/hooks/guard-destructive-git.sh"))
+  any(.matcher == "Bash" and any(.hooks[]?; .command | test("guard-destructive-git\\.sh")))
 ' "$REPO_DIR/claude/settings.json" >/dev/null 2>&1; then
   log_ok "claude/settings.json registers guard-destructive-git.sh"
 else
@@ -834,7 +853,7 @@ fi
 
 if jq -e '
   (.hooks.PreToolUse // []) |
-  any(.matcher == "Bash" and any(.hooks[]?; .command == "bash ~/.claude/hooks/enforce-git-claw.sh"))
+  any(.matcher == "Bash" and any(.hooks[]?; .command | test("enforce-git-claw\\.sh")))
 ' "$REPO_DIR/claude/settings.json" >/dev/null 2>&1; then
   log_ok "claude/settings.json registers enforce-git-claw.sh"
 else
