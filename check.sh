@@ -251,9 +251,13 @@ if [ -f "$PLUGIN_MANIFEST" ] && command -v jq &>/dev/null; then
     # Freshness check, limited to plugins pinned to a raw commit SHA (no semver release).
     # For those the marketplace clone's HEAD is the correct "latest" baseline. Versioned
     # plugins (e.g. 4.9.0) resolve through releases, so HEAD would report false staleness.
-    while IFS=$'\t' read -r plugin_id plugin_version plugin_sha; do
+    #
+    # The ref comes from the installPath leaf, NOT gitCommitSha. `claude plugin update`
+    # refreshes the cache directory while leaving gitCommitSha/version on the previous
+    # commit, so gitCommitSha reports staleness that ./setup.sh can never clear.
+    while IFS=$'\t' read -r plugin_id plugin_ref; do
       [ -z "$plugin_id" ] && continue
-      case "$plugin_version" in
+      case "$plugin_ref" in
         *[!0-9a-f]*|"") continue ;;  # not a raw SHA — versioned release, skip
       esac
       mp_name="${plugin_id##*@}"
@@ -261,16 +265,20 @@ if [ -f "$PLUGIN_MANIFEST" ] && command -v jq &>/dev/null; then
       [ -d "$mp_dir/.git" ] || continue
       mp_head="$(git -C "$mp_dir" rev-parse HEAD 2>/dev/null || true)"
       [ -z "$mp_head" ] && continue
-      if [ "$plugin_sha" = "$mp_head" ]; then
-        log_ok "plugin $plugin_id: up to date (${plugin_sha:0:7})"
-      else
-        log_warn "plugin $plugin_id: outdated (${plugin_sha:0:7} → ${mp_head:0:7}) — run ./setup.sh"
-        WARNINGS=$((WARNINGS + 1))
-      fi
+      # installPath records an abbreviated SHA, so match against HEAD by prefix
+      case "$mp_head" in
+        "$plugin_ref"*)
+          log_ok "plugin $plugin_id: up to date ($plugin_ref)"
+          ;;
+        *)
+          log_warn "plugin $plugin_id: outdated ($plugin_ref → ${mp_head:0:12}) — run ./setup.sh"
+          WARNINGS=$((WARNINGS + 1))
+          ;;
+      esac
     done <<< "$(jq -r \
       '(.plugins // {}) | to_entries[] | .key as $id | .value[]
        | select(.scope == "user")
-       | [$id, (.version // ""), (.gitCommitSha // "")] | @tsv' \
+       | [$id, (.installPath // "" | split("/") | last // "")] | @tsv' \
       "$PLUGIN_MANIFEST" 2>/dev/null || true)"
   fi
 fi
