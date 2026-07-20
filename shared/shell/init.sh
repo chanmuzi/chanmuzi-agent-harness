@@ -37,8 +37,13 @@ _cc_run() {
 
   (
     cd "$launch_dir" || return 1
+    # unset (not just "skip") matters: a caller may already have
+    # CLAUDE_CONFIG_DIR exported (e.g. a shell spawned from a cc-up session),
+    # and inheriting it would start the personal command on the work account.
     if [ -n "$config_dir" ]; then
       export CLAUDE_CONFIG_DIR="$config_dir"
+    else
+      unset CLAUDE_CONFIG_DIR
     fi
     command env -u TMUX claude --dangerously-skip-permissions "$@"
   )
