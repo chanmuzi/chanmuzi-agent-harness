@@ -106,12 +106,18 @@ read_installed_ref() {
   [ -f "$1/.installed-ref" ] && cat "$1/.installed-ref" || echo ""
 }
 
-# Commit SHA of an installed Claude plugin ("name@marketplace") at user scope.
-plugin_installed_sha() {
+# Installed ref of a Claude plugin ("name@marketplace") at user scope.
+# Reads the installPath leaf, NOT gitCommitSha: `claude plugin update` refreshes the
+# cache directory while leaving gitCommitSha/version pinned to the previous commit,
+# so comparing gitCommitSha reports "no change" across a real update.
+# The leaf is a semver directory ("4.15.4") for released plugins, or a commit SHA
+# prefix ("57a71c1febfc") for raw-SHA-pinned ones.
+plugin_installed_ref() {
   local manifest="$CLAUDE_DIR/plugins/installed_plugins.json"
   [ -f "$manifest" ] || { echo ""; return 0; }
   jq -r --arg p "$1" \
-    '(.plugins[$p] // []) | map(select(.scope == "user")) | .[0].gitCommitSha // ""' \
+    '(.plugins[$p] // []) | map(select(.scope == "user")) | .[0].installPath // ""
+     | split("/") | last // ""' \
     "$manifest" 2>/dev/null || echo ""
 }
 
@@ -430,20 +436,20 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
     for plugin in $PLUGINS; do
       if echo "$INSTALLED_PLUGINS" | grep -qF "$plugin"; then
         # Already installed — update it. `claude plugin update` is idempotent, so the
-        # installed SHA before/after is what tells us whether anything actually moved.
-        SHA_BEFORE=$(plugin_installed_sha "$plugin")
+        # installed ref before/after is what tells us whether anything actually moved.
+        REF_BEFORE=$(plugin_installed_ref "$plugin")
         UPDATE_OUTPUT=$(claude plugin update "$plugin" --scope user 2>&1) && UPDATE_EXIT=0 || UPDATE_EXIT=$?
-        SHA_AFTER=$(plugin_installed_sha "$plugin")
+        REF_AFTER=$(plugin_installed_ref "$plugin")
 
         if [ $UPDATE_EXIT -ne 0 ]; then
           echo "$UPDATE_OUTPUT" | sed 's/^/    /'
           log_warn "Failed to update $plugin"
           FAIL_COUNT=$((FAIL_COUNT + 1))
-        elif [ -n "$SHA_BEFORE" ] && [ "$SHA_BEFORE" = "$SHA_AFTER" ]; then
+        elif [ -n "$REF_BEFORE" ] && [ "$REF_BEFORE" = "$REF_AFTER" ]; then
           log_ok "$plugin (up to date)"
           SKIP_COUNT=$((SKIP_COUNT + 1))
         else
-          log_action "$plugin (${SHA_BEFORE:0:7} → ${SHA_AFTER:0:7}) — restart Claude Code to apply"
+          log_action "$plugin ($REF_BEFORE → $REF_AFTER) — restart Claude Code to apply"
           UPDATE_COUNT=$((UPDATE_COUNT + 1))
         fi
       else
