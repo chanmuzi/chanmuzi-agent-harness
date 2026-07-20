@@ -75,10 +75,11 @@ chmod +x setup.sh check.sh
 
 | 명령어 | 설명 |
 |--------|------|
-| `claude` | 권한 스킵 (hooks가 안전장치) |
-| `claude-safe` | 기본 권한 모드 |
-| `claude-team [name]` | tmux 세션에서 실행 |
-| `claude-team-safe [name]` | tmux + 기본 권한 |
+| `cc` | 개인 계정 — 권한 스킵 (hooks가 안전장치) |
+| `cc-up` | 업무 계정(`chanmuzi@upstage.ai`) — 권한 스킵 |
+
+두 명령은 `CLAUDE_CONFIG_DIR`로 계정을 분리합니다. `cc`는 기본값 `~/.claude`,
+`cc-up`은 `~/.claude-upstage`를 사용합니다.
 
 ### Codex CLI
 
@@ -110,8 +111,8 @@ Claude Code와 Codex CLI의 플러그인/스킬 생태계는 다르므로 완전
 이 harness는 기본적으로 Claude Code와 Codex CLI를 **퍼미션리스 모드**(권한 확인 없이 실행)로 설정합니다.
 안전장치는 pre/post-tool-use **hooks**가 담당합니다 (예: `block-no-verify.sh`가 `--no-verify` 차단).
 
-- `claude` / `codex` — 퍼미션리스 모드 (hooks가 안전장치)
-- `claude-safe` / `codex-safe` — 매 동작마다 승인 필요
+- `cc` / `cc-up` / `codex` — 퍼미션리스 모드 (hooks가 안전장치)
+- `codex-safe` — 매 동작마다 승인 필요
 
 `setup.sh` 실행 전에 `claude/settings.json`과 `shared/shell/init.sh`를 확인하는 것을 권장합니다.
 
