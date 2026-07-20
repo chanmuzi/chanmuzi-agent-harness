@@ -1,4 +1,5 @@
 {
+  "skillListingBudgetFraction": 0.015,
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "OMC_SKIP_HOOKS": "keyword-detector",
@@ -9,6 +10,7 @@
       "WebSearch",
       "WebFetch",
       "Read(~/.claude/*)",
+      "Read(~/.claude-upstage/*)",
       "Bash(ls *)",
       "Bash(find *)",
       "Bash(git status*)",
@@ -39,6 +41,7 @@
       "Bash(gh pr merge *--admin*)"
     ]
   },
+  "model": "opus[1m]",
   "hooks": {
     "PreToolUse": [
       {
@@ -46,17 +49,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/block-no-verify.sh",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/block-no-verify.sh\"",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/guard-destructive-git.sh",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/guard-destructive-git.sh\"",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/enforce-git-claw.sh",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/enforce-git-claw.sh\"",
             "timeout": 5
           }
         ]
@@ -68,7 +71,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/quality-gate.sh",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/quality-gate.sh\"",
             "timeout": 10
           }
         ]
@@ -79,7 +82,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/stop-sound.sh",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/stop-sound.sh\"",
             "timeout": 3
           }
         ]
@@ -90,7 +93,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/subagent-stop-sound.sh",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/subagent-stop-sound.sh\"",
             "timeout": 3
           }
         ]
@@ -101,7 +104,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/notification-sound.sh",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/notification-sound.sh\"",
             "timeout": 3
           }
         ]
@@ -110,13 +113,13 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "bash ~/.claude/statusline.sh",
+    "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/statusline.sh\"",
     "padding": 0
   },
   "enabledPlugins": {
     "oh-my-claudecode@omc": true,
     "git-claw@git-claw": true,
-    "ui-ux-pro-max@ui-ux-pro-max-skill": false,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true,
     "codex@openai-codex": true
   },
   "extraKnownMarketplaces": {
@@ -146,14 +149,15 @@
     }
   },
   "language": "Korean",
+  "effortLevel": "medium",
   "autoMemoryEnabled": false,
   "skipDangerousModePermissionPrompt": true,
-  "skillListingBudgetFraction": 0.015,
+  "teammateMode": "auto",
+  "agentPushNotifEnabled": true,
   "voiceEnabled": false,
   "omc": {
     "deepDive": {
       "ambiguityThreshold": 0.1
     }
-  },
-  "teammateMode": "auto"
+  }
 }
