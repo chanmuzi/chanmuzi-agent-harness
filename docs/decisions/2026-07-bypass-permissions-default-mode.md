@@ -65,6 +65,42 @@ bypass 모드에서도 하네스의 가드는 그대로 작동한다. 이는 새
 즉 이번 변경은 **안전 정책을 바꾸는 게 아니라**, 이미 메인 세션에 적용되던 "권한 스킵 + 훅 가드"
 조합을 티메이트까지 일관되게 확장하는 것이다.
 
+## 검증
+
+### 성공 기준
+
+이 버그의 성공 기준은 심링크 배포가 아니라 **데몬이 스폰한 티메이트에서 권한 프롬프트가 사라지는 것**이다.
+티메이트는 `--dangerously-skip-permissions` 플래그 없이 뜬 프로세스가 이 `settings.json`을 로드하는
+구조이므로, 성공 기준을 다음으로 조작적 정의한다.
+
+> 플래그 없이 뜬 Claude 프로세스가 `settings.json`의 `defaultMode: "bypassPermissions"`만으로
+> 권한이 필요한 명령을 프롬프트 없이 실행한다.
+
+### 실측 (2026-07-22)
+
+`--dangerously-skip-permissions`와 `--permission-mode`를 **일부러 배제**하고, `--settings`로
+`defaultMode`만 주입해 헤드리스(`-p`)로 권한 필요한 명령(`echo verified > marker`)의 실행 여부를 대조했다.
+
+| 조건 | `defaultMode` | 결과 |
+|------|---------------|------|
+| control | `default` | ❌ 명령 차단, marker 미생성 (권한 요구) |
+| treatment | `bypassPermissions` | ✅ 명령 실행, marker 생성 |
+
+플래그 없는 프로세스가 **settings의 `defaultMode`만으로 스킵**함을 확인했다. 티메이트도 같은 파일을
+같은 방식(플래그가 아니라 디스크의 settings를 읽음)으로 로드하므로, 이 결과가 티메이트 스킵의 직접 근거다.
+
+### 남은 확인 (선택)
+
+위 실측은 헤드리스 메인 프로세스로 메커니즘(플래그 없는 프로세스 + settings `defaultMode` → 스킵)을
+검증했다. 실제 `bg-spare` 티메이트에서의 관찰은 설정 반영 후 새 터미널에서 `cc agents`로 티메이트에
+권한 필요한 명령 1건을 시켜 프롬프트가 없는지 보면 30초 내 확인된다.
+
+### 심링크 배포
+
+`setup.sh`는 이 변경에 **불필요**하다. `~/.claude/settings.json`이 이미 메인 체크아웃 파일을 가리키는
+심링크이므로, merge 후 파일 내용만 갱신되면 바로 반영된다. 배포 검증이 필요하면 merge 후 메인
+체크아웃에서 `./check.sh`를 돌린다(worktree에서는 심링크 경로 불일치로 가짜 실패).
+
 ## 트레이드오프
 
 - `cc` / `ccu`의 `--dangerously-skip-permissions` 플래그는 이제 **사실상 redundant**다.
