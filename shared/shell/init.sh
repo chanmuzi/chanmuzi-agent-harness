@@ -20,14 +20,18 @@ _cc_launch_dir() {
 }
 
 # Launch Claude Code at the git root with permissions skipped
-# (hooks provide the safety guardrails).
+# (hooks provide the safety guardrails). Runs in a subshell so the caller's cwd
+# and environment are untouched.
 # $1: CLAUDE_CONFIG_DIR to use, or "" for the default (~/.claude).
+# $2: mode — "agents" (background agents; cmux hooks disabled so teammates inherit
+#     the lead's bypass) or "session" (plain interactive session; cmux hooks kept).
+# Remaining args are passed through to claude.
 # env -u TMUX: workaround for Claude Code 256-color downgrade in tmux
 # See: https://github.com/anthropics/claude-code/issues/36785
-# Runs in a subshell so the caller's cwd and environment are untouched.
 _cc_run() {
   local config_dir="$1"
-  shift
+  local mode="$2"
+  shift 2
 
   local launch_dir
   launch_dir="$(_cc_launch_dir)"
@@ -45,18 +49,44 @@ _cc_run() {
     else
       unset CLAUDE_CONFIG_DIR
     fi
-    command env -u TMUX claude --dangerously-skip-permissions "$@"
+    if [ "$mode" = "agents" ]; then
+      # Background agents (`cc` / `ccu`): inside a cmux terminal the cmux `claude`
+      # wrapper injects a PermissionRequest hook that routes permission requests to
+      # cmux. The lead bypasses via --dangerously-skip-permissions, but daemon-
+      # spawned teammates do not carry that flag, so their requests hit the hook and
+      # prompt. Disabling the cmux hook injection makes the wrapper pass through to
+      # the real claude, so teammates inherit the lead's bypass (matching plain
+      # non-cmux / SSH behavior). The export lives only in this subshell, so it
+      # never leaks to the caller's shell or other terminals, and the harness's own
+      # settings.json hooks stay active.
+      # See docs/decisions/2026-07-agent-teams-cmux-permission.md
+      export CMUX_CLAUDE_HOOKS_DISABLED=1
+      command env -u TMUX claude --dangerously-skip-permissions agents "$@"
+    else
+      # Plain interactive session: keep cmux hooks (notifications/status feed).
+      command env -u TMUX claude --dangerously-skip-permissions "$@"
+    fi
   )
 }
 
-# Personal account (default ~/.claude)
+# Personal account (default ~/.claude) — background agents (cmux hooks off).
 cc() {
-  _cc_run "" "$@"
+  _cc_run "" agents "$@"
 }
 
-# Work account: chanmuzi@upstage.ai
+# Work account (chanmuzi@upstage.ai) — background agents (cmux hooks off).
 ccu() {
-  _cc_run "$CCU_CONFIG_DIR" "$@"
+  _cc_run "$CCU_CONFIG_DIR" agents "$@"
+}
+
+# Personal account — plain interactive session (cmux hooks kept).
+ccd() {
+  _cc_run "" session "$@"
+}
+
+# Work account — plain interactive session (cmux hooks kept).
+ccud() {
+  _cc_run "$CCU_CONFIG_DIR" session "$@"
 }
 
 # ── Codex CLI ──
