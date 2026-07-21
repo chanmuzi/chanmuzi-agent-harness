@@ -26,7 +26,7 @@ Both agents receive the same repository rules here.
 - Guard macOS-only commands with `[ "$(uname -s)" = "Darwin" ]`
 - Guard Linux-only commands with `[ "$(uname -s)" = "Linux" ]`
 - Claude config is fully symlink-managed from `claude/`
-- Two Claude accounts share this config: `cc` (personal, `~/.claude`) and `cc-up` (work, `~/.claude-upstage`); `setup.sh` symlinks the same sources into both
+- Two Claude accounts share this config: `cc` (personal, `~/.claude`) and `ccu` (work, `~/.claude-upstage`); `setup.sh` symlinks the same sources into both
 - Never hardcode `~/.claude` in `claude/settings.json` — use `${CLAUDE_CONFIG_DIR:-$HOME/.claude}` so each account resolves its own directory
 - Codex config is split between symlink-managed files in `codex/` and patch-only updates to `~/.codex/config.toml`
 - This harness fully manages Codex `mcp_servers.*` state based on `codex/mcp-servers.json` and may prune undeclared entries during setup

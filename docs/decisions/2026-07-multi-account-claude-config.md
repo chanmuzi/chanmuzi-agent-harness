@@ -1,4 +1,4 @@
-# 2026-07 — Claude Code 다계정: `cc` / `cc-up` 분리
+# 2026-07 — Claude Code 다계정: `cc` / `ccu` 분리
 
 ## 상태
 
@@ -15,10 +15,10 @@
 | 명령어 | 계정 | `CLAUDE_CONFIG_DIR` |
 |--------|------|---------------------|
 | `cc` | 개인 | (미설정 → 기본 `~/.claude`) |
-| `cc-up` | 업무 `chanmuzi@upstage.ai` | `~/.claude-upstage` |
+| `ccu` | 업무 `chanmuzi@upstage.ai` | `~/.claude-upstage` |
 
 `cc`는 상속된 `CLAUDE_CONFIG_DIR`을 **명시적으로 unset한다.** 변수를 설정하지 않고 넘어가는 것만으로는 부족하다.
-이미 값이 export된 셸(예: `cc-up` 세션에서 띄운 터미널)에서 `cc`를 실행하면 개인 명령이 업무 계정 설정과
+이미 값이 export된 셸(예: `ccu` 세션에서 띄운 터미널)에서 `cc`를 실행하면 개인 명령이 업무 계정 설정과
 자격증명으로 시작되어, `cc = 개인 계정` 계약이 깨진다. PR #30 리뷰에서 지적되어 반영했다.
 
 두 디렉터리 모두 `setup.sh`의 `link_claude_config()`가 **같은 레포 파일로 symlink**한다.
@@ -84,7 +84,7 @@
 ## 함께 제거한 것
 
 `claude-safe`, `claude-team`, `claude-team-safe` 세 함수를 **삭제했다.** 실사용이 없었다.
-`claude`라는 이름도 남기지 않았다 — `cc` / `cc-up`이 정식 명령이고, `claude`를 치면 래퍼 없는 원본 CLI가 실행된다.
+`claude`라는 이름도 남기지 않았다 — `cc` / `ccu`가 정식 명령이고, `claude`를 치면 래퍼 없는 원본 CLI가 실행된다.
 
 ## `cc` 이름과 C 컴파일러 충돌
 

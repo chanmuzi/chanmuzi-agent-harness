@@ -9,7 +9,7 @@ export ENABLE_EXPERIMENTAL_MCP_CLI='true'
 # Config directory for the work (Upstage) account. The personal account keeps
 # the default ~/.claude so existing harness symlinks stay untouched.
 # See docs/decisions/ for why accounts are separated this way.
-CC_UP_CONFIG_DIR="${CC_UP_CONFIG_DIR:-$HOME/.claude-upstage}"
+CCU_CONFIG_DIR="${CCU_CONFIG_DIR:-$HOME/.claude-upstage}"
 
 # Resolve the git root of the current directory (empty when not in a git repo).
 # Claude sessions must start at the repo root: root CLAUDE.md is an @AGENTS.md
@@ -38,7 +38,7 @@ _cc_run() {
   (
     cd "$launch_dir" || return 1
     # unset (not just "skip") matters: a caller may already have
-    # CLAUDE_CONFIG_DIR exported (e.g. a shell spawned from a cc-up session),
+    # CLAUDE_CONFIG_DIR exported (e.g. a shell spawned from a ccu session),
     # and inheriting it would start the personal command on the work account.
     if [ -n "$config_dir" ]; then
       export CLAUDE_CONFIG_DIR="$config_dir"
@@ -55,8 +55,8 @@ cc() {
 }
 
 # Work account: chanmuzi@upstage.ai
-cc-up() {
-  _cc_run "$CC_UP_CONFIG_DIR" "$@"
+ccu() {
+  _cc_run "$CCU_CONFIG_DIR" "$@"
 }
 
 # ── Codex CLI ──
