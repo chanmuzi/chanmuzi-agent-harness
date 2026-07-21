@@ -37,7 +37,7 @@ REPO_DIR="$(resolve_path "$SCRIPT_DIR")"
 REPO_DIR="${REPO_DIR%/.}"
 CLAUDE_DIR="$HOME/.claude"
 # Work account (chanmuzi@upstage.ai) config dir, selected by CLAUDE_CONFIG_DIR
-# in the cc-up shell function. Shares the same harness config as the personal
+# in the ccu shell function. Shares the same harness config as the personal
 # account. See docs/decisions/2026-07-multi-account-claude-config.md
 CLAUDE_UP_DIR="$HOME/.claude-upstage"
 CODEX_DIR="$HOME/.codex"
