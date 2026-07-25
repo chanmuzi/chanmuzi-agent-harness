@@ -10,7 +10,7 @@ PreToolUse 차단 **한 겹으로만** 처리한다. 에이전트 전역 문서(
 ## 배경
 
 background job(`cc`/`ccu`가 띄우는 백그라운드 세션)이나 agent 세션에서 작업을 마치면
-PR이 **항상 draft로** 생성됐다. 이 레포의 PR 컨벤션은 review-ready PR이므로 매번 손으로
+PR이 **항상 draft로** 생성됐다. 이 레포의 PR 컨벤션은 draft가 아닌 일반 PR이므로 매번 손으로
 `gh pr ready`를 눌러야 했다.
 
 원인을 추적한 결과, `--draft`는 이 레포나 `git-claw` 플러그인이 아니라
@@ -83,7 +83,7 @@ override한다"고 적어 CLI에 하드코딩된 프롬프트를 **명시적으�
 
 ## 결과
 
-- background agent가 `--draft`를 붙여도 PR은 review-ready로 만들어진다
+- background agent가 `--draft`를 붙여도 PR은 draft가 아닌 상태로 만들어진다
 - CLI 버전에 종속적인 것은 **이 결정의 동기**(하드코딩된 프롬프트, 설정 키 부재)이지
   강제 수단이 아니다. 위에 적은 대로 훅은 gh CLI 인터페이스에만 의존하므로,
   Anthropic이 프롬프트를 바꾸거나 설정 키를 제공해도 훅을 고칠 필요는 없다.
