@@ -247,8 +247,13 @@ if printf '%s\n' "$COMMAND_NO_GIT_MSG" | grep -Eq '(^|[;&|[:space:]])gh[[:space:
 
   # 4b. gh pr create --draft / -d.
   #
-  # This repo's PR convention is a PR that is ready for review, so the flag is
-  # blocked here and the agent re-runs without it.
+  # A draft PR sends no review-request notification — that is what draft is for.
+  # The person running this harness relies on that notification to notice that
+  # an agent finished and opened a PR at all, so a draft PR silently goes
+  # unnoticed. The flag is blocked here and the agent re-runs without it.
+  #
+  # This is a property of how the maintainer works, not of any one repo's
+  # conventions, which is why the check is not scoped by repo or account.
   #
   # The rule is stated in terms of the gh CLI, not in terms of any agent's
   # prompt: it holds for whatever process runs `gh pr create`. Claude Code's
@@ -279,7 +284,7 @@ if printf '%s\n' "$COMMAND_NO_GIT_MSG" | grep -Eq '(^|[;&|[:space:]])gh[[:space:
     printf '%s\n' "$PR_CREATE_SEG" |
     grep -Eq '(^|[[:space:]])(--draft([[:space:]]|$)|--draft=(true|1)([[:space:]]|$)|-d([[:space:]]|$))'; then
     emit_block \
-      'gh pr create --draft/-d creates a draft PR; this harness ships PRs ready for review' \
+      'gh pr create --draft/-d opens a draft PR, which sends no notification, so the PR goes unnoticed' \
       'drop the --draft/-d flag and re-run (use the /pr skill, which never sets it)' \
       'draft PR blocked by harness policy.' \
       'set ALLOW_DRAFT_PR=1 only when the user explicitly asked for a draft PR.'
