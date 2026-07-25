@@ -60,6 +60,26 @@ assert block "gh pr create WITHOUT a capitalized-prefix title" \
 assert allow "gh pr create WITH a valid prefixed title" \
   "gh pr create ${D}${D}title \"Fix: proper\" ${D}${D}body \"x\""
 
+# --- check 4b: draft PRs are blocked (Claude Code hardcodes --draft) ---
+assert block "gh pr create ${D}${D}draft" \
+  "gh pr create ${D}${D}draft ${D}${D}title \"Fix: proper\" ${D}${D}body \"x\""
+assert block "gh pr create ${D}d short flag" \
+  "gh pr create ${D}d ${D}${D}title \"Fix: proper\" ${D}${D}body \"x\""
+assert block "gh pr create ${D}${D}draft=true" \
+  "gh pr create ${D}${D}draft=true ${D}${D}title \"Fix: proper\" ${D}${D}body \"x\""
+
+# --- check 4b false positives that must NOT block ---
+assert allow "${D}${D}draft=false explicit opt-out" \
+  "gh pr create ${D}${D}draft=false ${D}${D}title \"Fix: proper\" ${D}${D}body \"x\""
+assert allow "${D}${D}draft text inside gh pr ${D}${D}body" \
+  "gh pr create ${D}${D}title \"Fix: proper\" ${D}${D}body \"the hook blocks ${D}${D}draft now\""
+assert allow "${D}${D}draft text inside a commit message" \
+  "git commit ${D}m \"docs: gh pr create ${D}${D}draft 차단 규칙 추가\""
+assert allow "${D}d flag in an unrelated chained command" \
+  "gh pr create ${D}${D}title \"Fix: proper\" ${D}${D}body \"x\" && ls ${D}d /tmp"
+assert allow "${D}${D}dry-run is not ${D}${D}draft" \
+  "gh pr create ${D}${D}dry-run ${D}${D}title \"Fix: proper\" ${D}${D}body \"x\""
+
 # --- sanity: ordinary valid commit ---
 assert allow "plain valid ${D}m commit" "git commit ${D}m \"fix: 뭔가 고침\""
 

@@ -135,12 +135,14 @@ PR_TITLE_PREFIX='(Feat|Fix|Refactor|Style|Perf|Docs|Test|Chore|Hotfix|Release):'
 ISSUE_BODY_MARKER='Generated with \[Claude Code\]'
 
 emit_block() {
-  local reason="$1" suggestion="$2"
-  printf 'BLOCKED: git-claw skill bypass detected.\n' >&2
+  local reason="$1" suggestion="$2" \
+    header="${3:-git-claw skill bypass detected.}" \
+    override="${4:-re-run with ENFORCE_GIT_CLAW=0 only after user confirmation.}"
+  printf 'BLOCKED: %s\n' "$header" >&2
   printf 'Command: %s\n' "$COMMAND" >&2
   printf 'Reason: %s\n' "$reason" >&2
   printf 'Action: %s\n' "$suggestion" >&2
-  printf 'Override: re-run with ENFORCE_GIT_CLAW=0 only after user confirmation.\n' >&2
+  printf 'Override: %s\n' "$override" >&2
   exit 2
 }
 
@@ -241,6 +243,43 @@ if printf '%s\n' "$COMMAND_NO_GIT_MSG" | grep -Eq '(^|[;&|[:space:]])gh[[:space:
     emit_block \
       "gh pr create title \"$TITLE\" lacks the capitalized prefix (Feat:/Fix:/...) required by the /pr skill" \
       'invoke the /pr skill instead; it fills in the PR template and title convention'
+  fi
+
+  # 4b. gh pr create --draft / -d.
+  #
+  # Claude Code hardcodes "open a draft PR via `gh pr create --draft`" into its
+  # background-session and agent system prompts; there is no settings.json key
+  # that turns it off (verified against the 2.1.x CLI bundle — see
+  # docs/decisions/2026-07-pr-draft-policy.md). This repo's PR convention is a
+  # ready-for-review PR, so the flag is blocked here and the agent re-runs
+  # without it.
+  #
+  # Matched against COMMAND_NO_BODY_NO_MSG (gh bodies AND commit messages
+  # stripped) so that the literal text "--draft" quoted inside a PR body or a
+  # commit message — e.g. a decision record describing this very rule — is not
+  # mistaken for a real flag.
+  #
+  # `--draft=false` is gh's explicit opt-out and stays allowed; `--dry-run` must
+  # not match, hence the explicit boundary after the flag name.
+  #
+  # The match is scoped to the `gh pr create ...` segment (bounded by command
+  # separators) rather than the whole command line: `-d` is gh's short form for
+  # --draft, but it is also a common flag elsewhere (`ls -d`, `mkdir -d`), so an
+  # unscoped search would block unrelated chained commands.
+  PR_CREATE_SEG="$(printf '%s\n' "$COMMAND_NO_BODY_NO_MSG" | perl -0777 -ne '
+    if (/\bgh\s+pr\s+create\b([^|;&]*)/) {
+      print $1;
+      exit;
+    }
+  ' 2>/dev/null)"
+  if [ "${ALLOW_DRAFT_PR:-0}" != "1" ] &&
+    printf '%s\n' "$PR_CREATE_SEG" |
+    grep -Eq '(^|[[:space:]])(--draft([[:space:]]|$)|--draft=(true|1)([[:space:]]|$)|-d([[:space:]]|$))'; then
+    emit_block \
+      'gh pr create --draft/-d creates a draft PR; this harness ships PRs ready for review' \
+      'drop the --draft/-d flag and re-run (use the /pr skill, which never sets it)' \
+      'draft PR blocked by harness policy.' \
+      'set ALLOW_DRAFT_PR=1 only when the user explicitly asked for a draft PR.'
   fi
 fi
 
