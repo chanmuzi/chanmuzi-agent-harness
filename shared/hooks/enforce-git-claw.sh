@@ -247,20 +247,8 @@ if printf '%s\n' "$COMMAND_NO_GIT_MSG" | grep -Eq '(^|[;&|[:space:]])gh[[:space:
 
   # 4b. gh pr create --draft / -d.
   #
-  # A draft PR sends no review-request notification — that is what draft is for.
-  # The person running this harness relies on that notification to notice that
-  # an agent finished and opened a PR at all, so a draft PR silently goes
-  # unnoticed. The flag is blocked here and the agent re-runs without it.
-  #
-  # This is a property of how the maintainer works, not of any one repo's
-  # conventions, which is why the check is not scoped by repo or account.
-  #
-  # The rule is stated in terms of the gh CLI, not in terms of any agent's
-  # prompt: it holds for whatever process runs `gh pr create`. Claude Code's
-  # background/agent prompts currently hardcode a draft PR and expose no setting
-  # to turn that off (see docs/decisions/2026-07-pr-draft-policy.md), which is
-  # what motivated this check — but the check does not depend on that staying
-  # true, and stays correct if those prompts change or a real setting appears.
+  # A draft PR sends no notification, so the PR goes unnoticed.
+  # Rationale and rejected alternatives: docs/decisions/2026-07-pr-draft-policy.md
   #
   # Matched against COMMAND_NO_BODY_NO_MSG (gh bodies AND commit messages
   # stripped) so that the literal text "--draft" quoted inside a PR body or a
