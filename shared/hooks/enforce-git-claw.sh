@@ -247,12 +247,15 @@ if printf '%s\n' "$COMMAND_NO_GIT_MSG" | grep -Eq '(^|[;&|[:space:]])gh[[:space:
 
   # 4b. gh pr create --draft / -d.
   #
-  # Claude Code hardcodes "open a draft PR via `gh pr create --draft`" into its
-  # background-session and agent system prompts; there is no settings.json key
-  # that turns it off (verified against the 2.1.x CLI bundle — see
-  # docs/decisions/2026-07-pr-draft-policy.md). This repo's PR convention is a
-  # ready-for-review PR, so the flag is blocked here and the agent re-runs
-  # without it.
+  # This repo's PR convention is a PR that is ready for review, so the flag is
+  # blocked here and the agent re-runs without it.
+  #
+  # The rule is stated in terms of the gh CLI, not in terms of any agent's
+  # prompt: it holds for whatever process runs `gh pr create`. Claude Code's
+  # background/agent prompts currently hardcode a draft PR and expose no setting
+  # to turn that off (see docs/decisions/2026-07-pr-draft-policy.md), which is
+  # what motivated this check — but the check does not depend on that staying
+  # true, and stays correct if those prompts change or a real setting appears.
   #
   # Matched against COMMAND_NO_BODY_NO_MSG (gh bodies AND commit messages
   # stripped) so that the literal text "--draft" quoted inside a PR body or a
