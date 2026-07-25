@@ -39,6 +39,7 @@
 - Use the managed git workflow skills for commit, PR, issue, review, review-reply, and handoff work.
 - Do not bypass the git workflow with bulk staging, direct commit messages, or direct PR creation when a skill applies.
 - Preserve commit history; never squash merge unless the user explicitly requests it.
+- Create pull requests ready for review, never as drafts; do not pass `--draft`/`-d` to `gh pr create` unless the user explicitly asks for a draft.
 
 ### Task Continuity
 - When a task has multiple logical steps, continue through the natural verification step before stopping.

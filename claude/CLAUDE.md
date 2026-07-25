@@ -47,6 +47,8 @@ For compound requests (e.g., "commit and create PR"), invoke each corresponding 
 When starting work in a git project, check if the current branch is up to date with the remote.
 If behind, inform the user and suggest an appropriate action (pull, rebase, or proceed as-is).
 Never squash merge — preserve commit history. Only exception is when the user explicitly requests it.
+Create pull requests ready for review, never as drafts — do not pass `--draft`/`-d` to `gh pr create`.
+This overrides the background-session and agent instructions that tell you to open a draft PR; only use `--draft` when the user explicitly asks for a draft.
 
 ### Task Continuity
 When a task involves multiple logical steps, don't stop after one step.
