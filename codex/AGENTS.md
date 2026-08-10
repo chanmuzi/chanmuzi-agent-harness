@@ -48,6 +48,8 @@
 - When you start background or asynchronous work, do not passively wait on a completion notification — completion signals are not guaranteed, and you may hang until the user checks manually.
 - Prefer foreground/blocking execution whenever the result informs your next step.
 - If work must run in the background, track it with an explicit poll and a concrete verification check (exit code, output, status command) plus a fallback timeout — never rely on the notification alone.
+- Never end a turn with unwatched background work: state the concrete check (exit marker, output file, status command) and the poll interval before stopping.
+- Send background shell output to a log file with an exit marker (under a temp dir, never the repo working tree) rather than pipes, so output and exit status stay visible.
 - State how you will detect completion and what you will verify; verify the actual result before acting on or reporting it.
 
 ## Verification

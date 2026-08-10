@@ -60,11 +60,15 @@ When writing prompts for Agent tool calls that involve shell execution or multi-
 - Prefer foreground agents when intermediate results inform your next steps
 
 ### Async Work Tracking
-When you delegate to a background task, sub-agent, or separate session, do not end your turn passively "waiting for a notification." Completion signals are not guaranteed to wake you — a known Claude Code limitation where background/sub-agent completion is sometimes never injected back into the main loop, leaving you hung until the user checks manually.
-- Prefer foreground/blocking execution whenever the result informs your next step.
-- If work must run in the background, set up active tracking — a defined poll interval, a concrete verification check (exit code, output file, status command), and a fallback timeout — using `ScheduleWakeup`, `Monitor`, or the `/loop` skill. Never rely on the completion notification alone.
-- State your detection mechanism explicitly: how you will know it finished and what you will verify. "I'll wait for the notification" is not an acceptable mechanism on its own.
-- When delegated work completes, verify the actual result before acting on or reporting it.
+These rules apply only when work runs in the background (background shell, background sub-agent, separate session); they change nothing for ordinary foreground work. For background sub-agents, check state via `TaskList`/`TaskGet` (plus a `ScheduleWakeup` fallback) instead of a file watch.
+
+Completion notifications are not guaranteed to arrive — a known Claude Code limitation, worst when several tasks finish around the same time. A dropped notification with no other wake mechanism leaves the session idle until the user speaks. Treat notifications as a bonus signal, never the sole mechanism.
+
+- Prefer foreground execution when the result informs your next step.
+- **Never end a turn with unwatched background work**: before ending, arm at least one wake mechanism sized to outlive the job — `Monitor` with `persistent: true` (or a timeout beyond the expected duration), a `ScheduleWakeup` fallback, or the `/loop` skill — and state how you will know it finished. "I'll wait for the notification" alone is not acceptable.
+- Send background shell output to a log file with an exit marker (`cmd > "$LOG" 2>&1; status=$?; echo "exit=$status" >> "$LOG"; exit "$status"`, with `$LOG` under the session scratchpad or a temp dir, never the repo working tree) rather than pipes, so output and exit status stay visible and failures keep their exit code.
+- Keep watch events coarse (milestones, errors, completion) — not per-line.
+- When work completes, verify the actual result (exit marker, output) before acting on or reporting it.
 
 ### Significant Actions
 Before performing significant actions:
