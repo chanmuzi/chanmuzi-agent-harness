@@ -89,6 +89,14 @@ ccud() {
   _cc_run "$CCU_CONFIG_DIR" session "$@"
 }
 
+# ── Orca ──
+
+# Reset a stuck "working" spinner for an Orca pane whose Claude session is
+# actually idle. See claude/skills/orca-relay/SKILL.md for the full playbook.
+orca-nudge() {
+  "$CHANMUZI_AGENT_HARNESS_HOME/shared/bin/orca-nudge" "$@"
+}
+
 # ── Codex CLI ──
 
 # Default: bypass all approvals and sandbox (hooks provide safety guardrails)

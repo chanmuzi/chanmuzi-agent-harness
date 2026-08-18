@@ -1,0 +1,157 @@
+#!/bin/bash
+# orca-nudge — reset a stuck "working" spinner for an Orca pane.
+#
+# Orca's relay keeps per-pane agent state in memory and only updates it when a
+# hook event arrives. An idle Claude session emits no events, so a state that
+# went stale (missed SubagentStop, background task finishing after the last
+# Stop, ...) spins forever. This tool re-sends the same SessionStart(resume)
+# event the session itself would send, which makes the relay reset the pane's
+# subagent roster / background-task flags and recompute the state.
+#
+# It only corrects state that is already wrong: the relay treats the event as
+# "session resumed and idle", which is exactly what the guard below verifies
+# before sending. See claude/skills/orca-relay/SKILL.md for the full playbook
+# and docs/decisions/2026-08-orca-agent-hooks.md for background.
+#
+# Usage:
+#   orca-nudge              list Claude sessions running inside Orca panes
+#   orca-nudge <pid>        nudge the pane of that Claude process
+#   orca-nudge --force <pid>  skip the "session must be idle" guard
+
+set -u
+
+FORCE=0
+if [ "${1:-}" = "--force" ]; then
+  FORCE=1
+  shift
+fi
+TARGET_PID="${1:-}"
+
+# ── Per-platform helpers ──
+
+# All ORCA_*/CLAUDE_* vars of a process, one VAR=value per line.
+proc_env() {
+  local pid="$1"
+  if [ -r "/proc/$pid/environ" ]; then
+    tr '\0' '\n' < "/proc/$pid/environ"
+  elif [ "$(uname)" = "Darwin" ]; then
+    # `ps eww` appends "VAR=value" pairs after the command; keep only those.
+    ps eww -o command= -p "$pid" 2>/dev/null | tr ' ' '\n' | grep -E '^[A-Z_]+='
+  fi
+}
+
+env_var() { # $1: pid, $2: var name
+  proc_env "$1" | grep -m1 "^$2=" | cut -d= -f2-
+}
+
+# ── Session status guard ──
+
+# Claude Code writes <config_dir>/sessions/<pid>.json with a self-reported
+# "status" field. Nudging is only safe when the session says it is idle —
+# otherwise we would briefly show a genuinely working session as done.
+session_status() { # $1: pid, $2: config dir ("" -> ~/.claude)
+  local dir="${2:-$HOME/.claude}"
+  local f="$dir/sessions/$1.json"
+  [ -r "$f" ] || return 1
+  grep -o '"status":"[^"]*"' "$f" | head -1 | cut -d'"' -f4
+}
+
+# ── Nudge one pane ──
+
+nudge() { # $1: pid of the claude process
+  local pid="$1"
+
+  if ! kill -0 "$pid" 2>/dev/null; then
+    echo "error: no such process: $pid" >&2
+    return 1
+  fi
+
+  local pane_key tab_id endpoint config_dir
+  pane_key="$(env_var "$pid" ORCA_PANE_KEY)"
+  tab_id="$(env_var "$pid" ORCA_TAB_ID)"
+  endpoint="$(env_var "$pid" ORCA_AGENT_HOOK_ENDPOINT)"
+  config_dir="$(env_var "$pid" CLAUDE_CONFIG_DIR)"
+
+  if [ -z "$pane_key" ]; then
+    echo "error: PID $pid has no ORCA_PANE_KEY — not an Orca pane session" >&2
+    return 1
+  fi
+
+  # Same resolution order as Orca's own claude-hook.sh: the endpoint file
+  # (remote relay) wins, direct env vars (local panes) are the fallback.
+  local port token hook_env hook_version
+  if [ -n "$endpoint" ] && [ -r "$endpoint" ]; then
+    # shellcheck disable=SC1090
+    . "$endpoint"
+  fi
+  port="${ORCA_AGENT_HOOK_PORT:-$(env_var "$pid" ORCA_AGENT_HOOK_PORT)}"
+  token="${ORCA_AGENT_HOOK_TOKEN:-$(env_var "$pid" ORCA_AGENT_HOOK_TOKEN)}"
+  hook_env="${ORCA_AGENT_HOOK_ENV:-$(env_var "$pid" ORCA_AGENT_HOOK_ENV)}"
+  hook_version="${ORCA_AGENT_HOOK_VERSION:-$(env_var "$pid" ORCA_AGENT_HOOK_VERSION)}"
+
+  if [ -z "$port" ] || [ -z "$token" ]; then
+    echo "error: could not resolve Orca hook endpoint for PID $pid" >&2
+    echo "       (endpoint file: ${endpoint:-none})" >&2
+    return 1
+  fi
+
+  local status
+  status="$(session_status "$pid" "$config_dir")" || status=""
+  if [ "$FORCE" -ne 1 ]; then
+    if [ -z "$status" ]; then
+      echo "warn: no session state file for PID $pid — cannot verify it is idle." >&2
+      echo "      Re-run with --force if you are sure the session is not working." >&2
+      return 1
+    fi
+    if [ "$status" != "idle" ]; then
+      echo "refused: session $pid reports status \"$status\" (not idle)." >&2
+      echo "         A nudge would wrongly clear a live spinner. Use --force to override." >&2
+      return 1
+    fi
+  fi
+
+  local http_code
+  http_code="$(printf '%s' '{"hook_event_name":"SessionStart","source":"resume"}' | \
+    curl -sS -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${port}/hook/claude" \
+      --connect-timeout 0.5 --max-time 1.5 \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      -H "X-Orca-Agent-Hook-Token: ${token}" \
+      --data-urlencode "paneKey=${pane_key}" \
+      --data-urlencode "tabId=${tab_id:-${pane_key%%:*}}" \
+      --data-urlencode "env=${hook_env:-remote}" \
+      --data-urlencode "version=${hook_version:-1}" \
+      --data-urlencode "payload@-")" || {
+    echo "error: could not reach relay on 127.0.0.1:${port}" >&2
+    return 1
+  }
+
+  case "$http_code" in
+    2*) echo "nudged PID $pid (pane ${pane_key%%:*}…, status: ${status:-unknown}) — relay accepted (HTTP $http_code)" ;;
+    *)  echo "error: relay rejected the event (HTTP $http_code) — Orca may have changed its hook API" >&2
+        return 1 ;;
+  esac
+}
+
+# ── List mode ──
+
+list_sessions() {
+  local found=0 pid pane status config_dir
+  # -x would miss wrapper-launched processes; match the command word instead.
+  for pid in $(pgrep -u "$(id -un)" -f '(^|/)claude( |$)' 2>/dev/null); do
+    pane="$(env_var "$pid" ORCA_PANE_KEY)" || true
+    [ -n "$pane" ] || continue
+    config_dir="$(env_var "$pid" CLAUDE_CONFIG_DIR)"
+    status="$(session_status "$pid" "$config_dir")" || status="?"
+    printf '%-10s status=%-8s pane=%s\n' "$pid" "$status" "$pane"
+    found=1
+  done
+  if [ "$found" -eq 0 ]; then
+    echo "no Claude sessions running inside Orca panes (or not an Orca machine)"
+  fi
+}
+
+if [ -z "$TARGET_PID" ]; then
+  list_sessions
+else
+  nudge "$TARGET_PID"
+fi
