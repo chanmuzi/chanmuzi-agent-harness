@@ -44,6 +44,19 @@ env_var() { # $1: pid, $2: var name
   proc_env "$1" | grep -m1 "^$2=" | cut -d= -f2-
 }
 
+# Read one ORCA_AGENT_HOOK_* assignment from an endpoint.env file WITHOUT
+# executing it. The path comes from another process's environment, so the file
+# is parsed as data only — sourcing it would run attacker-controllable content
+# in this shell, before the idle guard. Files not owned by the current user
+# are ignored entirely.
+endpoint_val() { # $1: endpoint file, $2: var name
+  [ -n "$1" ] && [ -r "$1" ] || return 0
+  local owner
+  owner="$(stat -c %u "$1" 2>/dev/null || stat -f %u "$1" 2>/dev/null)"
+  [ "$owner" = "$(id -u)" ] || return 0
+  grep -m1 "^$2=" "$1" 2>/dev/null | cut -d= -f2-
+}
+
 # ── Session status guard ──
 
 # Claude Code writes <config_dir>/sessions/<pid>.json with a self-reported
@@ -63,6 +76,9 @@ nudge() { # $1: pid of the claude process
 
   if ! kill -0 "$pid" 2>/dev/null; then
     echo "error: no such process: $pid" >&2
+    echo "       Dead sessions cannot be nudged — the pane key and endpoint live in the" >&2
+    echo "       process's environment. Type anything into that pane (or start a new" >&2
+    echo "       session there) so a fresh hook event resets the relay state instead." >&2
     return 1
   fi
 
@@ -78,16 +94,19 @@ nudge() { # $1: pid of the claude process
   fi
 
   # Same resolution order as Orca's own claude-hook.sh: the endpoint file
-  # (remote relay) wins, direct env vars (local panes) are the fallback.
+  # (remote relay) wins, the TARGET process's env vars (local panes) are the
+  # fallback. The caller's own ORCA_* env is never consulted — this script
+  # usually runs inside another Orca pane whose port/token belong to a
+  # different pane and possibly a different relay.
   local port token hook_env hook_version
-  if [ -n "$endpoint" ] && [ -r "$endpoint" ]; then
-    # shellcheck disable=SC1090
-    . "$endpoint"
-  fi
-  port="${ORCA_AGENT_HOOK_PORT:-$(env_var "$pid" ORCA_AGENT_HOOK_PORT)}"
-  token="${ORCA_AGENT_HOOK_TOKEN:-$(env_var "$pid" ORCA_AGENT_HOOK_TOKEN)}"
-  hook_env="${ORCA_AGENT_HOOK_ENV:-$(env_var "$pid" ORCA_AGENT_HOOK_ENV)}"
-  hook_version="${ORCA_AGENT_HOOK_VERSION:-$(env_var "$pid" ORCA_AGENT_HOOK_VERSION)}"
+  port="$(endpoint_val "$endpoint" ORCA_AGENT_HOOK_PORT)"
+  token="$(endpoint_val "$endpoint" ORCA_AGENT_HOOK_TOKEN)"
+  hook_env="$(endpoint_val "$endpoint" ORCA_AGENT_HOOK_ENV)"
+  hook_version="$(endpoint_val "$endpoint" ORCA_AGENT_HOOK_VERSION)"
+  [ -n "$port" ]         || port="$(env_var "$pid" ORCA_AGENT_HOOK_PORT)"
+  [ -n "$token" ]        || token="$(env_var "$pid" ORCA_AGENT_HOOK_TOKEN)"
+  [ -n "$hook_env" ]     || hook_env="$(env_var "$pid" ORCA_AGENT_HOOK_ENV)"
+  [ -n "$hook_version" ] || hook_version="$(env_var "$pid" ORCA_AGENT_HOOK_VERSION)"
 
   if [ -z "$port" ] || [ -z "$token" ]; then
     echo "error: could not resolve Orca hook endpoint for PID $pid" >&2
@@ -110,6 +129,18 @@ nudge() { # $1: pid of the claude process
     fi
   fi
 
+  # Re-check right before sending to shrink the idle→working race window.
+  # Full atomicity is impossible (the relay has no conditional-reset API); the
+  # residual race is documented in the orca-relay skill. Self-heals on the
+  # session's next hook event either way.
+  if [ "$FORCE" -ne 1 ]; then
+    status="$(session_status "$pid" "$config_dir")" || status=""
+    if [ "$status" != "idle" ]; then
+      echo "refused: session $pid became \"${status:-unknown}\" just before sending — aborted." >&2
+      return 1
+    fi
+  fi
+
   local http_code
   http_code="$(printf '%s' '{"hook_event_name":"SessionStart","source":"resume"}' | \
     curl -sS -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${port}/hook/claude" \
@@ -118,6 +149,8 @@ nudge() { # $1: pid of the claude process
       -H "X-Orca-Agent-Hook-Token: ${token}" \
       --data-urlencode "paneKey=${pane_key}" \
       --data-urlencode "tabId=${tab_id:-${pane_key%%:*}}" \
+      --data-urlencode "launchToken=$(env_var "$pid" ORCA_AGENT_LAUNCH_TOKEN)" \
+      --data-urlencode "worktreeId=$(env_var "$pid" ORCA_WORKTREE_ID)" \
       --data-urlencode "env=${hook_env:-remote}" \
       --data-urlencode "version=${hook_version:-1}" \
       --data-urlencode "payload@-")" || {
