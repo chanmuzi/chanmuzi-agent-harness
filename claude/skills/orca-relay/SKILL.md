@@ -65,5 +65,6 @@ relay가 PTY의 master를 쥐고 있어 앱을 꺼도 세션이 살아남는다.
 - 근본 원인(stale 상태 재조정 부재)은 Orca 쪽 코드라 harness에서 못 고친다.
 - relay의 claude 핸들러는 `SessionEnd`를 소비하지 않는다(2026-08 기준, devin 등
   다른 핸들러 전용). working 중 프로세스가 종료되면 스피너가 남는 것은 이 때문.
-- 추적: #7740(훅 설치 경로), #8585/#13852(relay 수명주기),
-  stale 상태 재조정 이슈(제출 시 여기에 링크 추가).
+- 추적: [#7740](https://github.com/stablyai/orca/issues/7740)(훅 설치 경로),
+  [#8585](https://github.com/stablyai/orca/issues/8585)/[#13852](https://github.com/stablyai/orca/issues/13852)(relay 수명주기),
+  [#15317](https://github.com/stablyai/orca/issues/15317)(stale 상태 재조정 부재).
