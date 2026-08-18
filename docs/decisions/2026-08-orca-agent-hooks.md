@@ -70,6 +70,26 @@ settings.json **모두**에 재설치를 시도해 symlink가 양쪽 다 끊긴�
 - **`workspace.changed` 12KB 초과 시 무통보 드랍**: relay 로그에
   `Dropped workspace.changed (13798B > producer frame capacity 12288B)`. 세션 목록이
   낡은 채 남는 원인 후보.
+- **stale "working" 상태가 영원히 재조정되지 않음** (2026-08-18 실측): relay는
+  훅 이벤트가 올 때만 pane 상태를 갱신하는 인메모리 상태 머신이라, 마지막 Stop
+  시점에 백그라운드 작업/서브에이전트가 "실행 중"으로 기록되면 이후 실제로
+  끝나도 **idle 세션은 이벤트를 안 만들어 스피너가 영원히 남는다**. 앱 재시작도
+  무효 — relay와 그 메모리는 살아남는 게 설계 목적. 세션 자체는
+  `<config_dir>/sessions/<pid>.json`에서 `idle`을 보고하는데 UI만 spinning이면
+  이 케이스다. 복구는 `orca-nudge <pid>`(`shared/bin/orca-nudge`) —
+  세션이 보냈을 것과 동일한 `SessionStart(resume)` 이벤트를 주입해 relay가
+  roster/플래그를 리셋하게 한다. 진단 절차는 `claude/skills/orca-relay` 스킬 참조.
+  업스트림 이슈: 제출 시 링크 추가.
+- **정정 (2026-08-18)**: relay의 claude 핸들러는 `SessionEnd`를 소비하지 않는다
+  (devin 등 다른 에이전트 핸들러 전용, relay.js 분기 원문 확인). 따라서 harness
+  훅 세트에 SessionEnd를 추가해도 현재는 무효 — working 중 claude 프로세스가
+  종료되면 스피너가 남는 것은 이 미소비가 원인이며, orca가 소비를 시작하는
+  버전부터 추가할 가치가 생긴다.
+- **동일 버전 이중 relay는 버그가 아닐 수 있음** (2026-08-18 실측): 앱이 소켓
+  정체성별로 relay를 여러 개 유지하고 재시작 후 양쪽 모두에 재연결하는 것을
+  확인. PTY 자식이 있는 relay가 실세션을 쥔 쪽이고(`pgrep -P <relay-pid>`),
+  자식 없는 relay는 빈 연결이라 무해하다. 위의 "고아화" 판단 전에 자식 유무를
+  먼저 확인할 것.
 
 ## 다른 머신 적용 절차
 
