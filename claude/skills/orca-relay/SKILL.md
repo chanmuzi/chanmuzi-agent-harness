@@ -54,11 +54,23 @@ relay가 PTY의 master를 쥐고 있어 앱을 꺼도 세션이 살아남는다.
 
 ## 도구
 
+실행 경로: 셸 함수 `orca-nudge`(init.sh가 로드된 인터랙티브 셸), 비인터랙티브
+셸/에이전트 Bash에서는 `"$CHANMUZI_AGENT_HARNESS_HOME/shared/bin/orca-nudge"`
+절대경로를 사용하라.
+
 - `orca-nudge` — orca pane에서 도는 Claude 세션 목록 + 자체 보고 상태
 - `orca-nudge <pid>` — 해당 pane에 `SessionStart(resume)` 이벤트를 주입해 relay
   상태 리셋 (idle 가드 내장, `--force`로 우회)
-- 본체: `shared/bin/orca-nudge`. Orca의 비공개 훅 API 형식에 의존하므로 Orca
-  업데이트 후 4xx가 나오면 형식 변경을 의심하라 (세션에 해는 없음).
+- Orca의 비공개 훅 API 형식에 의존하므로 Orca 업데이트 후 4xx가 나오면 형식
+  변경을 의심하라 (세션에 해는 없음).
+
+도구의 한계:
+
+- **죽은 세션은 복구 불가** — pane 키/엔드포인트를 대상 프로세스의 환경에서
+  읽으므로, working 중 종료된 세션(SessionEnd 미소비 케이스)의 스피너는 이
+  도구로 못 푼다. 해당 pane에 아무 입력이나 주어 훅 이벤트를 다시 흘릴 것.
+- **idle 확인과 전송 사이 잔여 경쟁** — 전송 직전 재확인으로 창을 줄였지만
+  원자성은 없다. 잘못 눌린 상태는 세션의 다음 훅 이벤트에서 자가 복구된다.
 
 ## 알려진 한계 / 업스트림
 
