@@ -79,7 +79,7 @@ settings.json **모두**에 재설치를 시도해 symlink가 양쪽 다 끊긴�
   이 케이스다. 복구는 `orca-nudge <pid>`(`shared/bin/orca-nudge`) —
   세션이 보냈을 것과 동일한 `SessionStart(resume)` 이벤트를 주입해 relay가
   roster/플래그를 리셋하게 한다. 진단 절차는 `claude/skills/orca-relay` 스킬 참조.
-  업스트림 이슈: 제출 시 링크 추가.
+  업스트림: [#15317](https://github.com/stablyai/orca/issues/15317)
 - **정정 (2026-08-18)**: relay의 claude 핸들러는 `SessionEnd`를 소비하지 않는다
   (devin 등 다른 에이전트 핸들러 전용, relay.js 분기 원문 확인). 따라서 harness
   훅 세트에 SessionEnd를 추가해도 현재는 무효 — working 중 claude 프로세스가
