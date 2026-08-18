@@ -125,6 +125,12 @@ check_claude_config() {
     name="$(basename "$cmd")"
     check_symlink "$target_dir/commands/$name" "$cmd" "$label commands/$name"
   done
+
+  for skill in "$REPO_DIR"/claude/skills/*/; do
+    [ -d "$skill" ] || continue
+    name="$(basename "$skill")"
+    check_symlink "$target_dir/skills/$name" "${skill%/}" "$label skills/$name"
+  done
 }
 
 check_claude_config "$CLAUDE_DIR"    "[personal]"
@@ -162,6 +168,13 @@ if [ -x "$REPO_DIR/shared/hooks/enforce-git-claw.sh" ]; then
   log_ok "shared/hooks/enforce-git-claw.sh executable"
 else
   log_error "shared/hooks/enforce-git-claw.sh missing or not executable"
+  ERRORS=$((ERRORS + 1))
+fi
+
+if [ -x "$REPO_DIR/shared/bin/orca-nudge" ]; then
+  log_ok "shared/bin/orca-nudge executable"
+else
+  log_error "shared/bin/orca-nudge missing or not executable"
   ERRORS=$((ERRORS + 1))
 fi
 

@@ -65,7 +65,7 @@ link_shared_skill_if_present() {
 link_claude_config() {
   local target_dir="$1"
 
-  mkdir -p "$target_dir/hooks" "$target_dir/commands"
+  mkdir -p "$target_dir/hooks" "$target_dir/commands" "$target_dir/skills"
 
   link_file "$REPO_DIR/claude/CLAUDE.md"       "$target_dir/CLAUDE.md"
   link_file "$REPO_DIR/claude/settings.json"   "$target_dir/settings.json"
@@ -80,6 +80,11 @@ link_claude_config() {
   for cmd in "$REPO_DIR"/claude/commands/*.md; do
     [ -f "$cmd" ] || continue
     link_file "$cmd" "$target_dir/commands/$(basename "$cmd")"
+  done
+
+  for skill in "$REPO_DIR"/claude/skills/*/; do
+    [ -d "$skill" ] || continue
+    link_file "${skill%/}" "$target_dir/skills/$(basename "$skill")"
   done
 }
 
@@ -317,6 +322,7 @@ if [ "$INSTALL_CLAUDE" = true ]; then
   ensure_executable "$REPO_DIR/shared/hooks/block-no-verify.sh"
   ensure_executable "$REPO_DIR/shared/hooks/guard-destructive-git.sh"
   ensure_executable "$REPO_DIR/shared/hooks/enforce-git-claw.sh"
+  ensure_executable "$REPO_DIR/shared/bin/orca-nudge"
 
   # ── Symlinks ──
   log_section "  Symlinks (personal: ~/.claude)..."

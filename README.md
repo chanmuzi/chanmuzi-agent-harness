@@ -23,11 +23,13 @@ chanmuzi-agent-harness/
 ├── shared/          # 크로스플랫폼 헬퍼, 쉘 함수, 공용 hooks
 │   ├── lib/os.sh
 │   ├── shell/init.sh
+│   ├── bin/         # 운영 도구 (orca-nudge — Orca stuck-spinner 복구)
 │   └── hooks/
 ├── claude/          # Claude Code 설정 (심링크 → ~/.claude/)
 │   ├── CLAUDE.md
 │   ├── settings.json
 │   ├── hooks/
+│   ├── skills/      # Claude 전용 스킬 (orca-relay) — Codex 대응물 없음(의도된 차이)
 │   └── commands/
 ├── codex/           # Codex CLI 설정 (심링크 + patch → ~/.codex/)
 │   ├── AGENTS.md

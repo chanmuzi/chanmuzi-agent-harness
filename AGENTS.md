@@ -10,7 +10,9 @@ Both agents receive the same repository rules here.
 
 ## Structure
 
-- `shared/` contains cross-platform helpers, shell functions, and common hooks
+- `shared/` contains cross-platform helpers, shell functions, common hooks, and
+  operational tools (`shared/bin/orca-nudge` — Orca stuck-spinner recovery; see
+  `claude/skills/orca-relay/SKILL.md` for the diagnosis playbook)
 - `claude/` contains Claude Code config sources for `~/.claude/`
 - `codex/` contains Codex CLI config sources for `~/.codex/`
 - `setup.sh` installs symlinks, patches Codex config, and installs agent extras
