@@ -5,6 +5,8 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=shared/lib/os.sh
 . "$SCRIPT_DIR/shared/lib/os.sh"
+# shellcheck source=shared/lib/plugins.sh
+. "$SCRIPT_DIR/shared/lib/plugins.sh"
 
 REPO_DIR="$(resolve_path "$SCRIPT_DIR")"
 REPO_DIR="${REPO_DIR%/.}"
@@ -243,19 +245,19 @@ fi
 PLUGIN_MANIFEST="$CLAUDE_DIR/plugins/installed_plugins.json"
 PLUGIN_CACHE_DIR="$CLAUDE_DIR/plugins/cache"
 if [ -f "$PLUGIN_MANIFEST" ] && command -v jq &>/dev/null; then
-  ACTIVE_PATHS="$(jq -r \
-    '(.plugins // {}) | to_entries[] | .value[]? | .installPath // empty' \
-    "$PLUGIN_MANIFEST" 2>/dev/null || true)"
+  # Physical paths: installPath may be recorded under ~/.claude-upstage, which is a
+  # symlink to ~/.claude. See shared/lib/plugins.sh.
+  ACTIVE_PATHS="$(plugin_active_cache_paths "$PLUGIN_MANIFEST")"
 
   if [ -z "$ACTIVE_PATHS" ]; then
-    log_error "installed_plugins.json: failed to parse installed plugins"
+    log_error "installed_plugins.json: no live cache path resolved"
     ERRORS=$((ERRORS + 1))
   else
     STALE_CACHE=0
     if [ -d "$PLUGIN_CACHE_DIR" ]; then
       for version_dir in "$PLUGIN_CACHE_DIR"/*/*/*; do
         [ -d "$version_dir" ] || continue
-        if ! printf '%s\n' "$ACTIVE_PATHS" | grep -qxF "$version_dir"; then
+        if ! plugin_cache_is_active "$version_dir" "$ACTIVE_PATHS"; then
           log_warn "stale plugin cache: ${version_dir#"$PLUGIN_CACHE_DIR"/} (run ./setup.sh)"
           WARNINGS=$((WARNINGS + 1))
           STALE_CACHE=$((STALE_CACHE + 1))

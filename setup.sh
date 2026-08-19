@@ -32,6 +32,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=shared/lib/os.sh
 . "$SCRIPT_DIR/shared/lib/os.sh"
+# shellcheck source=shared/lib/plugins.sh
+. "$SCRIPT_DIR/shared/lib/plugins.sh"
 
 REPO_DIR="$(resolve_path "$SCRIPT_DIR")"
 REPO_DIR="${REPO_DIR%/.}"
@@ -503,26 +505,42 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
     PLUGIN_MANIFEST="$CLAUDE_DIR/plugins/installed_plugins.json"
     PRUNE_COUNT=0
     if [ -d "$PLUGIN_CACHE_DIR" ] && [ -f "$PLUGIN_MANIFEST" ]; then
-      ACTIVE_PATHS=$(jq -r \
-        '(.plugins // {}) | to_entries[] | .value[]? | .installPath // empty' \
-        "$PLUGIN_MANIFEST" 2>/dev/null || echo "")
+      # Physical paths: installPath may be recorded under ~/.claude-upstage, which is a
+      # symlink to ~/.claude. See shared/lib/plugins.sh.
+      ACTIVE_PATHS="$(plugin_active_cache_paths "$PLUGIN_MANIFEST")"
 
       # Never prune on a parse failure — an empty list would delete every cached plugin.
       if [ -z "$ACTIVE_PATHS" ]; then
-        log_warn "installed_plugins.json parsing returned empty — skipping cache prune"
+        log_warn "installed_plugins.json: no live cache path resolved — skipping cache prune"
       else
+        # Classify first, so a wholesale mismatch can abort before anything is deleted.
+        STALE_DIRS=""
+        LIVE_COUNT=0
         for version_dir in "$PLUGIN_CACHE_DIR"/*/*/*; do
           [ -d "$version_dir" ] || continue
-          if ! printf '%s\n' "$ACTIVE_PATHS" | grep -qxF "$version_dir"; then
+          if plugin_cache_is_active "$version_dir" "$ACTIVE_PATHS"; then
+            LIVE_COUNT=$((LIVE_COUNT + 1))
+          else
+            STALE_DIRS="$STALE_DIRS$version_dir"$'\n'
+          fi
+        done
+
+        if [ "$LIVE_COUNT" -eq 0 ] && [ -n "$STALE_DIRS" ]; then
+          # Every cached plugin looks stale — the manifest and the cache disagree wholesale,
+          # which is a bug here, not a cache to delete.
+          log_warn "plugin cache: no entry matches installed_plugins.json — skipping prune"
+        else
+          while IFS= read -r version_dir; do
+            [ -n "$version_dir" ] || continue
             if rm -rf "$version_dir"; then
               log_remove "stale cache: ${version_dir#"$PLUGIN_CACHE_DIR"/}"
               PRUNE_COUNT=$((PRUNE_COUNT + 1))
             else
               log_warn "Failed to remove stale cache: $version_dir"
             fi
-          fi
-        done
-        [ "$PRUNE_COUNT" -eq 0 ] && log_ok "plugin cache: no stale versions"
+          done <<< "$STALE_DIRS"
+          [ "$PRUNE_COUNT" -eq 0 ] && log_ok "plugin cache: no stale versions"
+        fi
       fi
     fi
 
