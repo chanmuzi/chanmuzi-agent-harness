@@ -13,13 +13,31 @@
 # before sending. See claude/skills/orca-relay/SKILL.md for the full playbook
 # and docs/decisions/2026-08-orca-agent-hooks.md for background.
 #
+# Dead-pane fallback: the relay does not consume claude's SessionEnd, so a
+# claude that dies while "working" leaves the spinner stuck with no process to
+# read the pane env from. The relay-held shell left in that pane still carries
+# ORCA_PANE_KEY / ORCA_AGENT_HOOK_ENDPOINT, so the same event can be sent from
+# there — list mode shows such panes as status=dead with the shell's PID.
+#
 # Usage:
-#   orca-nudge              list Claude sessions running inside Orca panes
-#   orca-nudge <pid>        nudge the pane of that Claude process
+#   orca-nudge              list Claude sessions running inside Orca panes,
+#                           plus dead panes (claude exited, shell survives)
+#   orca-nudge <pid>        nudge the pane of that Claude process; for a dead
+#                           pane, pass the pane shell's PID from list mode
 #   orca-nudge --force <pid>  skip the "session must be idle" guard
+#   orca-nudge --sweep      cron mode: reap dead panes the UI already closed
+#                           (tab gone from ~/.orca/sessions — kills the shell
+#                           so the pane cannot resurrect), and nudge the rest
+#                           once (marker in ~/.cache/orca-nudge, dropped when
+#                           a new claude appears in the pane)
 
 set -u
 
+MODE=""
+if [ "${1:-}" = "--sweep" ]; then
+  MODE=sweep
+  shift
+fi
 FORCE=0
 if [ "${1:-}" = "--force" ]; then
   FORCE=1
@@ -57,6 +75,28 @@ endpoint_val() { # $1: endpoint file, $2: var name
   grep -m1 "^$2=" "$1" 2>/dev/null | cut -d= -f2-
 }
 
+# ── Process-tree helpers ──
+
+# Same command-word match as list mode's pgrep pattern.
+is_claude_proc() { # $1: pid
+  ps -o args= -p "$1" 2>/dev/null | grep -qE '(^|/)claude( |$)'
+}
+
+# Print the PID of the first claude process in the subtree under $1 (excluding
+# $1 itself); fail if there is none. A pane shell with no claude descendant is
+# a dead pane — the session exited but the relay kept the shell (and its env).
+claude_descendant() { # $1: pid
+  local child
+  for child in $(pgrep -P "$1" 2>/dev/null); do
+    if is_claude_proc "$child"; then
+      echo "$child"
+      return 0
+    fi
+    claude_descendant "$child" && return 0
+  done
+  return 1
+}
+
 # ── Session status guard ──
 
 # Claude Code writes <config_dir>/sessions/<pid>.json with a self-reported
@@ -76,9 +116,9 @@ nudge() { # $1: pid of the claude process
 
   if ! kill -0 "$pid" 2>/dev/null; then
     echo "error: no such process: $pid" >&2
-    echo "       Dead sessions cannot be nudged — the pane key and endpoint live in the" >&2
-    echo "       process's environment. Type anything into that pane (or start a new" >&2
-    echo "       session there) so a fresh hook event resets the relay state instead." >&2
+    echo "       If this was a claude PID whose process died, the relay-held shell in that" >&2
+    echo "       pane still carries the pane key/endpoint — run \`orca-nudge\` (list mode)" >&2
+    echo "       and nudge the PID shown as status=dead for that pane instead." >&2
     return 1
   fi
 
@@ -91,6 +131,21 @@ nudge() { # $1: pid of the claude process
   if [ -z "$pane_key" ]; then
     echo "error: PID $pid has no ORCA_PANE_KEY — not an Orca pane session" >&2
     return 1
+  fi
+
+  # Dead-pane fallback: the target may be the pane's relay-held shell rather
+  # than a claude process. That is legitimate only when its claude really
+  # exited; with a live claude the session state file must be consulted, so
+  # redirect to that PID. The shell inherited the same ORCA_* environment,
+  # so everything below resolves identically.
+  local dead=0 live_claude
+  if ! is_claude_proc "$pid"; then
+    if live_claude="$(claude_descendant "$pid")"; then
+      echo "error: PID $pid is a pane shell with a live Claude session (PID $live_claude)." >&2
+      echo "       Nudge that PID instead so the idle guard can check its session state." >&2
+      return 1
+    fi
+    dead=1
   fi
 
   # Same resolution order as Orca's own claude-hook.sh: the endpoint file
@@ -115,25 +170,40 @@ nudge() { # $1: pid of the claude process
   fi
 
   local status
-  status="$(session_status "$pid" "$config_dir")" || status=""
-  if [ "$FORCE" -ne 1 ]; then
-    if [ -z "$status" ]; then
-      echo "warn: no session state file for PID $pid — cannot verify it is idle." >&2
-      echo "      Re-run with --force if you are sure the session is not working." >&2
-      return 1
-    fi
-    if [ "$status" != "idle" ]; then
-      echo "refused: session $pid reports status \"$status\" (not idle)." >&2
-      echo "         A nudge would wrongly clear a live spinner. Use --force to override." >&2
-      return 1
+  if [ "$dead" -eq 1 ]; then
+    # No claude process means nothing in this pane can genuinely be working
+    # (and no sessions/<pid>.json exists to consult) — the stuck spinner is
+    # exactly the state this fallback resets, so the idle guard is moot.
+    status="dead"
+  else
+    status="$(session_status "$pid" "$config_dir")" || status=""
+    if [ "$FORCE" -ne 1 ]; then
+      if [ -z "$status" ]; then
+        echo "warn: no session state file for PID $pid — cannot verify it is idle." >&2
+        echo "      Re-run with --force if you are sure the session is not working." >&2
+        return 1
+      fi
+      if [ "$status" != "idle" ]; then
+        echo "refused: session $pid reports status \"$status\" (not idle)." >&2
+        echo "         A nudge would wrongly clear a live spinner. Use --force to override." >&2
+        return 1
+      fi
     fi
   fi
 
-  # Re-check right before sending to shrink the idle→working race window.
+  # Re-check right before sending to shrink the race window. Live session:
+  # idle may have flipped back to working. Dead pane: a new claude may have
+  # just started there, and its own hooks now own the pane state — that check
+  # holds even under --force, since a stale nudge could clear a live spinner.
   # Full atomicity is impossible (the relay has no conditional-reset API); the
   # residual race is documented in the orca-relay skill. Self-heals on the
   # session's next hook event either way.
-  if [ "$FORCE" -ne 1 ]; then
+  if [ "$dead" -eq 1 ]; then
+    if live_claude="$(claude_descendant "$pid")"; then
+      echo "refused: a Claude session (PID $live_claude) just started in this pane — aborted." >&2
+      return 1
+    fi
+  elif [ "$FORCE" -ne 1 ]; then
     status="$(session_status "$pid" "$config_dir")" || status=""
     if [ "$status" != "idle" ]; then
       echo "refused: session $pid became \"${status:-unknown}\" just before sending — aborted." >&2
@@ -178,12 +248,120 @@ list_sessions() {
     printf '%-10s status=%-8s pane=%s\n' "$pid" "$status" "$pane"
     found=1
   done
+  # Dead panes: relay-held pane shells whose claude exited. The relay never
+  # consumes claude's SessionEnd, so such a pane's spinner sticks — and the
+  # shell keeps the pane env, making it a valid nudge target.
+  local shell
+  while read -r shell pane; do
+    [ -n "${shell:-}" ] || continue
+    printf '%-10s status=%-8s pane=%s (pane shell — claude exited)\n' "$shell" "dead" "$pane"
+    found=1
+  done < <(dead_panes)
   if [ "$found" -eq 0 ]; then
     echo "no Claude sessions running inside Orca panes (or not an Orca machine)"
   fi
 }
 
-if [ -z "$TARGET_PID" ]; then
+# Emit one "shell_pid pane_key" line per dead pane: a relay-held pane shell
+# (relay child with ORCA_PANE_KEY) that has no claude descendant.
+dead_panes() {
+  local relay shell pane
+  for relay in $(pgrep -u "$(id -un)" -f 'relay\.js --detached' 2>/dev/null); do
+    for shell in $(pgrep -P "$relay" 2>/dev/null); do
+      pane="$(env_var "$shell" ORCA_PANE_KEY)"
+      [ -n "$pane" ] || continue
+      claude_descendant "$shell" >/dev/null && continue
+      echo "$shell $pane"
+    done
+  done
+}
+
+# ── UI-abandoned pane detection ──
+
+# Orca's app persists per-project tab layout in a server-side store; each tab
+# carries the pane's remembered agent session id (the source of the app's
+# auto-typed `claude --resume`). Closing a pane in the UI removes its tab from
+# the store, but the relay keeps the pane's shell alive — and on the next
+# project open the app re-adopts the orphan PTY, so the pane "resurrects".
+# A dead pane whose tab id is gone from every store file is therefore residue
+# the user already closed; reaping its shell is what makes UI-close stick.
+# (Store schema v1, adoption behavior observed 2026-08-19 — see
+# docs/decisions/2026-08-orca-dead-pane-sweep.md.)
+ORCA_STORE_DIR="$HOME/.orca/sessions"
+REAP_MIN_AGE_SEC="${ORCA_NUDGE_REAP_MIN_AGE:-600}"
+
+# The store must look sane before its absence-of-a-tab means anything — if the
+# app wiped or moved the store, refusing to reap is the safe failure mode.
+store_ready() {
+  grep -qs '"tabsByWorktreePath"' "$ORCA_STORE_DIR"/*.json 2>/dev/null
+}
+
+tab_in_store() { # $1: tab id
+  grep -qs "$1" "$ORCA_STORE_DIR"/*.json 2>/dev/null
+}
+
+# A dead pane shell is reapable garbage only when ALL of these hold:
+#   - the UI abandoned it (tab id absent from a sane store),
+#   - nothing at all runs inside the shell (claude or otherwise),
+#   - it is old enough that a just-created pane's store write cannot be
+#     lagging behind (REAP_MIN_AGE_SEC).
+# Intentionally kept panes are still listed in the store, so they never match.
+reapable() { # $1: shell pid, $2: pane key
+  store_ready || return 1
+  tab_in_store "${2%%:*}" && return 1
+  [ -z "$(pgrep -P "$1" 2>/dev/null)" ] || return 1
+  local et
+  et="$(ps -o etimes= -p "$1" 2>/dev/null | tr -d ' ')"
+  [ -n "$et" ] && [ "$et" -ge "$REAP_MIN_AGE_SEC" ]
+}
+
+# ── Sweep mode (cron) ──
+
+# Two-tier cleanup for dead panes. Panes the UI already closed are reaped
+# (shell killed — see reapable() above); panes still in the UI get their
+# spinner nudged exactly once. A per-pane marker file prevents the
+# every-minute cron from re-sending forever (dead panes persist until their
+# shell goes away); the marker is dropped when the shell dies or a new claude
+# starts in the pane, so a session that dies "working" again is re-covered.
+# Prints timestamped lines only when something happened — cron appends stdout
+# to the sweep log, so a quiet sweep must stay silent.
+SWEEP_STATE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/orca-nudge"
+
+sweep() {
+  local shell pane marker pid out
+  mkdir -p "$SWEEP_STATE_DIR"
+  for marker in "$SWEEP_STATE_DIR"/*.swept; do
+    [ -e "$marker" ] || continue
+    pid="${marker##*/}"; pid="${pid%%.*}"
+    if ! kill -0 "$pid" 2>/dev/null || claude_descendant "$pid" >/dev/null; then
+      rm -f "$marker"
+    fi
+  done
+  while read -r shell pane; do
+    [ -n "${shell:-}" ] || continue
+    # UI-abandoned residue: kill the shell so the pane cannot resurrect.
+    # Panes still present in the UI store fall through to the nudge below.
+    if reapable "$shell" "$pane"; then
+      kill -TERM "$shell" 2>/dev/null
+      echo "[$(date '+%F %T')] sweep: reaped shell $shell (pane ${pane%%:*}… closed in UI, claude exited)"
+      continue
+    fi
+    marker="$SWEEP_STATE_DIR/${shell}.${pane}.swept"
+    [ -e "$marker" ] && continue
+    if out="$(nudge "$shell" 2>&1)"; then
+      : > "$marker"
+      echo "[$(date '+%F %T')] sweep: $out"
+    else
+      echo "[$(date '+%F %T')] sweep: pane=$pane shell=$shell failed: $out"
+    fi
+  done < <(dead_panes)
+  # Heartbeat for "did cron actually run?" without a log line per minute.
+  touch "$SWEEP_STATE_DIR/.last-sweep"
+}
+
+if [ "$MODE" = "sweep" ]; then
+  sweep
+elif [ -z "$TARGET_PID" ]; then
   list_sessions
 else
   nudge "$TARGET_PID"
