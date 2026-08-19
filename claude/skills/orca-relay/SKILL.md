@@ -171,4 +171,15 @@ relay가 PTY의 master를 쥐고 있어 앱을 꺼도 세션이 살아남는다.
   harness 쪽 완화책이 위의 dead pane 폴백이다.
 - 추적: [#7740](https://github.com/stablyai/orca/issues/7740)(훅 설치 경로),
   [#8585](https://github.com/stablyai/orca/issues/8585)/[#13852](https://github.com/stablyai/orca/issues/13852)(relay 수명주기),
-  [#15317](https://github.com/stablyai/orca/issues/15317)(stale 상태 재조정 부재).
+  [#15317](https://github.com/stablyai/orca/issues/15317)(stale 상태 재조정 부재),
+  [#12447](https://github.com/stablyai/orca/issues/12447)(닫은 tab 부활 +
+  자동 resume — 서버 쪽 증거를 코멘트로 제공, 2026-08-19),
+  [#13716](https://github.com/stablyai/orca/issues/13716)(한 transcript에 live
+  프로세스 2개), [#9945](https://github.com/stablyai/orca/issues/9945)(close 시
+  자손 프로세스 종료 PR), [#10718](https://github.com/stablyai/orca/issues/10718)(Done
+  agent 정리 UI 부재).
+- 직접 보고 (2026-08-19):
+  [#15484](https://github.com/stablyai/orca/issues/15484)(세션 원장이 열린
+  pane의 tab을 10분 이상 미반영 — ghost reap 회수의 근거),
+  [#15485](https://github.com/stablyai/orca/issues/15485)(cwd 바뀐 자동
+  resume의 transcript 복제·fork 증식 + subagent 행 stale 스피너).
