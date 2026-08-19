@@ -11,6 +11,9 @@ REPO_DIR="${REPO_DIR%/.}"
 CLAUDE_DIR="$HOME/.claude"
 CLAUDE_UP_DIR="$HOME/.claude-upstage"
 CODEX_DIR="$HOME/.codex"
+# Skills follow Codex's own home resolution ($CODEX_HOME wins over ~/.codex);
+# must match setup.sh. See docs/decisions/2026-08-codex-skills-home.md
+CODEX_SKILLS_DIR="${CODEX_HOME:-$CODEX_DIR}/skills"
 AGENTS_DIR="$HOME/.agents"
 CODEX_MCP_FILE="$REPO_DIR/codex/mcp-servers.json"
 
@@ -44,7 +47,7 @@ check_symlink() {
 check_shared_skill_if_present() {
   local skill_name="$1"
   local src="$AGENTS_DIR/skills/$skill_name"
-  local dst="$CODEX_DIR/skills/$skill_name"
+  local dst="$CODEX_SKILLS_DIR/$skill_name"
 
   if [ -d "$src" ]; then
     check_symlink "$dst" "$src" "skill: $skill_name"
@@ -687,7 +690,7 @@ if [ -f "$SKILLS_FILE" ]; then
     skill_name="$(echo "$skill_name" | sed 's/#.*//' | xargs)"
     [ -z "$skill_name" ] && continue
     [ "$skill_name" = "context7" ] && continue
-    if [ -d "$CODEX_DIR/skills/$skill_name" ]; then
+    if [ -d "$CODEX_SKILLS_DIR/$skill_name" ]; then
       log_ok "skill: $skill_name"
     else
       log_warn "skill: $skill_name not installed"
@@ -697,7 +700,7 @@ if [ -f "$SKILLS_FILE" ]; then
 fi
 
 # dev-browser skill leftover check (support removed; see docs/decisions/2026-07-browser-automation.md)
-if [ -d "$CODEX_DIR/skills/dev-browser" ]; then
+if [ -d "$CODEX_SKILLS_DIR/dev-browser" ]; then
   log_warn "skills/dev-browser still present but dev-browser support was removed — run ./setup.sh --codex"
   WARNINGS=$((WARNINGS + 1))
 else
@@ -724,7 +727,7 @@ if [ -f "$EXTERNAL_SKILLS_FILE" ] && command -v jq &>/dev/null; then
 
     if [ -n "$EXT_DISCOVER" ]; then
       # Use list-skills.py to resolve expected skills, then check each
-      SKILL_LISTER="$CODEX_DIR/skills/.system/skill-installer/scripts/list-skills.py"
+      SKILL_LISTER="$CODEX_SKILLS_DIR/.system/skill-installer/scripts/list-skills.py"
       EXT_REF=$(jq -r ".[$i].ref // \"main\"" "$EXTERNAL_SKILLS_FILE")
       if [ -f "$SKILL_LISTER" ]; then
         DISCOVER_JSON=$(python3 "$SKILL_LISTER" \
@@ -738,7 +741,7 @@ if [ -f "$EXTERNAL_SKILLS_FILE" ] && command -v jq &>/dev/null; then
           }
           while IFS= read -r skill_name; do
             [ -z "$skill_name" ] && continue
-            if [ -d "$CODEX_DIR/skills/$skill_name" ]; then
+            if [ -d "$CODEX_SKILLS_DIR/$skill_name" ]; then
               log_ok "skill: $skill_name (discovered from $EXT_REPO)"
             else
               log_warn "skill: $skill_name not installed (discovered from $EXT_REPO)"
@@ -756,7 +759,7 @@ if [ -f "$EXTERNAL_SKILLS_FILE" ] && command -v jq &>/dev/null; then
     else
       while IFS= read -r skill_path; do
         skill_name="$(basename "$skill_path")"
-        if [ -d "$CODEX_DIR/skills/$skill_name" ]; then
+        if [ -d "$CODEX_SKILLS_DIR/$skill_name" ]; then
           log_ok "skill: $skill_name (from $EXT_REPO)"
         else
           log_warn "skill: $skill_name not installed (from $EXT_REPO)"

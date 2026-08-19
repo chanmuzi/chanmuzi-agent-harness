@@ -41,13 +41,20 @@ CLAUDE_DIR="$HOME/.claude"
 # account. See docs/decisions/2026-07-multi-account-claude-config.md
 CLAUDE_UP_DIR="$HOME/.claude-upstage"
 CODEX_DIR="$HOME/.codex"
+# Codex resolves its home from $CODEX_HOME when set (Orca account shells set it),
+# and the codex skill installer writes to $CODEX_HOME/skills. Skill state
+# (existence checks, .installed-ref, symlinks) must follow the same resolution,
+# or install/update logic acts on a tree Codex never reads.
+# Non-skill state (config.toml patches, hooks) intentionally stays in ~/.codex.
+# See docs/decisions/2026-08-codex-skills-home.md
+CODEX_SKILLS_DIR="${CODEX_HOME:-$CODEX_DIR}/skills"
 AGENTS_DIR="$HOME/.agents"
 CODEX_MCP_FILE="$REPO_DIR/codex/mcp-servers.json"
 
 link_shared_skill_if_present() {
   local skill_name="$1"
   local src="$AGENTS_DIR/skills/$skill_name"
-  local dst="$CODEX_DIR/skills/$skill_name"
+  local dst="$CODEX_SKILLS_DIR/$skill_name"
 
   if [ -d "$src" ]; then
     link_file "$src" "$dst"
@@ -132,7 +139,7 @@ plugin_installed_ref() {
 # would keep discovering it (its SKILL.md even tells the agent to reinstall the CLI).
 # Guarded by .installed-ref so a hand-authored skill of the same name is never deleted.
 migrate_remove_dev_browser_skill() {
-  local skill_dir="$CODEX_DIR/skills/dev-browser"
+  local skill_dir="$CODEX_SKILLS_DIR/dev-browser"
 
   [ -d "$skill_dir" ] || return 0
 
@@ -570,7 +577,7 @@ if [ "$INSTALL_CODEX" = true ]; then
     echo ""
   fi
 
-  mkdir -p "$CODEX_DIR/hooks" "$CODEX_DIR/skills"
+  mkdir -p "$CODEX_DIR/hooks" "$CODEX_SKILLS_DIR"
 
   log_section "  Hook Permissions..."
   ensure_executable "$REPO_DIR/shared/hooks/block-no-verify.sh"
@@ -1003,7 +1010,7 @@ PYEOF
 
   # ── Skills ──
   if command -v codex &>/dev/null; then
-    SKILL_INSTALLER="$CODEX_DIR/skills/.system/skill-installer/scripts/install-skill-from-github.py"
+    SKILL_INSTALLER="$CODEX_SKILLS_DIR/.system/skill-installer/scripts/install-skill-from-github.py"
     SKILLS_FILE="$REPO_DIR/codex/skills.txt"
 
     log_section "  Shared Skills..."
@@ -1023,7 +1030,7 @@ PYEOF
           [ -z "$skill_name" ] && continue
 
           if [ "$skill_name" = "context7" ]; then
-            if [ -L "$CODEX_DIR/skills/context7" ] || [ -d "$CODEX_DIR/skills/context7" ]; then
+            if [ -L "$CODEX_SKILLS_DIR/context7" ] || [ -d "$CODEX_SKILLS_DIR/context7" ]; then
               log_ok "context7 (managed via ~/.agents/skills)"
             else
               log_warn "context7 missing (expected symlink from ~/.agents/skills)"
@@ -1031,7 +1038,7 @@ PYEOF
             continue
           fi
 
-          SKILL_DIR="$CODEX_DIR/skills/$skill_name"
+          SKILL_DIR="$CODEX_SKILLS_DIR/$skill_name"
           if [ -d "$SKILL_DIR" ]; then
             INSTALLED_SHA="$(read_installed_ref "$SKILL_DIR")"
             if [ -z "$OPENAI_SKILLS_SHA" ]; then
@@ -1071,7 +1078,7 @@ PYEOF
 
     # ── External Skills (from external-skills.json) ──
     EXTERNAL_SKILLS_FILE="$REPO_DIR/codex/external-skills.json"
-    SKILL_LISTER="$CODEX_DIR/skills/.system/skill-installer/scripts/list-skills.py"
+    SKILL_LISTER="$CODEX_SKILLS_DIR/.system/skill-installer/scripts/list-skills.py"
     if [ -f "$EXTERNAL_SKILLS_FILE" ] && [ -f "$SKILL_INSTALLER" ]; then
       log_section "  External Skills..."
 
@@ -1111,7 +1118,7 @@ PYEOF
         while IFS= read -r skill_path; do
           [ -z "$skill_path" ] && continue
           skill_name="$(basename "$skill_path")"
-          SKILL_DIR="$CODEX_DIR/skills/$skill_name"
+          SKILL_DIR="$CODEX_SKILLS_DIR/$skill_name"
 
           if [ -d "$SKILL_DIR" ]; then
             INSTALLED_SHA="$(read_installed_ref "$SKILL_DIR")"
