@@ -47,6 +47,20 @@ relay가 PTY의 master를 쥐고 있어 앱을 꺼도 세션이 살아남는다.
   [#13852](https://github.com/stablyai/orca/issues/13852). 세션이 달린 relay를
   먼저 kill하지 말 것 — PTY가 함께 죽는다.
 
+### SSH 재접속 후 resume이 "No conversation found" 실패
+
+- Orca는 pane 복구 시 새 셸에 `claude --resume <id>`를 타이핑하는데, 원래
+  세션이 `ccu`/`ccud`(=`CLAUDE_CONFIG_DIR=~/.claude-upstage`)로 떴다면 그
+  env가 유실되어 기본 `~/.claude`에서만 세션을 찾다 실패한다.
+- harness의 `claude()` 셸 함수(init.sh)가 자동 우회한다: `--resume <uuid>`
+  감지 시 알려진 config 디렉토리들에서 `projects/*/<uuid>.jsonl`을 찾아 해당
+  계정으로 `CLAUDE_CONFIG_DIR`을 재지정해 실행한다 (해당 호출에만 적용).
+  `cc`/`ccu`/`ccd`/`ccud`에 `--resume`을 붙이는 교차 계정 resume도 `_cc_run`이
+  같은 로직으로 처리한다.
+- 래퍼가 없는 환경(init.sh 미로드 셸)에서는 수동으로:
+  `CLAUDE_CONFIG_DIR=~/.claude-upstage claude --dangerously-skip-permissions --resume <id>`
+- 근거: `docs/decisions/2026-08-orca-resume-config-dir.md`
+
 ### 재접속 후 화면이 깨져 보임
 
 - detached PTY 재접속(tmux attach와 동일) 특성. 세션은 정상이고 표시만 밀린 것.
