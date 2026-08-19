@@ -84,7 +84,10 @@ settings.json **모두**에 재설치를 시도해 symlink가 양쪽 다 끊긴�
   (devin 등 다른 에이전트 핸들러 전용, relay.js 분기 원문 확인). 따라서 harness
   훅 세트에 SessionEnd를 추가해도 현재는 무효 — working 중 claude 프로세스가
   종료되면 스피너가 남는 것은 이 미소비가 원인이며, orca가 소비를 시작하는
-  버전부터 추가할 가치가 생긴다.
+  버전부터 추가할 가치가 생긴다. harness 완화책(2026-08-19): claude가 죽어도
+  relay가 쥔 pane 셸의 env에 pane 키/엔드포인트가 남는 것을 실측으로 확인,
+  `orca-nudge`가 그 셸 PID(`status=dead`)를 통해 같은 이벤트를 주입하는
+  dead pane 폴백을 갖췄다.
 - **동일 버전 이중 relay는 버그가 아닐 수 있음** (2026-08-18 실측): 앱이 소켓
   정체성별로 relay를 여러 개 유지하고 재시작 후 양쪽 모두에 재연결하는 것을
   확인. PTY 자식이 있는 relay가 실세션을 쥔 쪽이고(`pgrep -P <relay-pid>`),
