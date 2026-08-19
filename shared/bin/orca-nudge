@@ -120,6 +120,9 @@ busy_descendant() { # $1: pid
 proc_age_sec() { # $1: pid
   local et started epoch
   et="$(ps -o etimes= -p "$1" 2>/dev/null | tr -d ' ')"
+  # macOS ps rejects the keyword but prints its valid-keyword list to stdout,
+  # so a failed run is non-empty garbage rather than "" — keep digits only.
+  case "$et" in *[!0-9]*) et="" ;; esac
   if [ -z "$et" ] && [ "$(uname -s)" = "Darwin" ]; then
     started="$(ps -o lstart= -p "$1" 2>/dev/null)"
     if [ -n "$started" ]; then
