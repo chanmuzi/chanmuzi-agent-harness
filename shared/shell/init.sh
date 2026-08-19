@@ -49,6 +49,19 @@ _cc_run() {
     else
       unset CLAUDE_CONFIG_DIR
     fi
+    # Resuming a session that lives in the other account's config dir (e.g.
+    # `ccd --resume <ccu-session>`) would otherwise fail with "No conversation
+    # found" — re-resolve from the transcript location, same as the claude()
+    # wrapper below. The export stays inside this subshell.
+    local session_id override
+    session_id="$(_cc_resume_session_id "$@")"
+    if [ -n "$session_id" ]; then
+      override="$(_cc_find_session_config_dir "$session_id")"
+      if [ -n "$override" ]; then
+        echo "[harness] 세션 $session_id 은(는) $override 계정 소속 — CLAUDE_CONFIG_DIR 재지정" >&2
+        export CLAUDE_CONFIG_DIR="$override"
+      fi
+    fi
     if [ "$mode" = "agents" ]; then
       # Background agents (`cc` / `ccu`): inside a cmux terminal the cmux `claude`
       # wrapper injects a PermissionRequest hook that routes permission requests to
@@ -87,6 +100,61 @@ ccd() {
 # Work account — plain interactive session (cmux hooks kept).
 ccud() {
   _cc_run "$CCU_CONFIG_DIR" session "$@"
+}
+
+# Print the session ID from a `--resume <uuid>` / `--resume=<uuid>` / `-r <uuid>`
+# argument, or nothing when the args carry no resumable session ID.
+_cc_resume_session_id() {
+  local arg session_id="" expect_id=0
+  for arg in "$@"; do
+    if [ "$expect_id" = 1 ]; then
+      expect_id=0
+      case "$arg" in
+        ????????-????-????-????-????????????) session_id="$arg" ;;
+      esac
+    fi
+    case "$arg" in
+      --resume|-r) expect_id=1 ;;
+      --resume=*) session_id="${arg#--resume=}" ;;
+    esac
+  done
+  [ -n "$session_id" ] && printf '%s\n' "$session_id"
+}
+
+# Print the config dir that holds the transcript for session $1, but only when
+# it differs from the effective config dir (empty output = no override needed).
+# Search order: effective dir first, so a session present in both never flips.
+_cc_find_session_config_dir() {
+  local id="$1" effective_dir dir
+  effective_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  for dir in "$effective_dir" "$HOME/.claude" "$CCU_CONFIG_DIR"; do
+    [ -d "$dir/projects" ] || continue
+    if [ -n "$(find "$dir/projects" -maxdepth 2 -name "$id.jsonl" -print 2>/dev/null | head -n 1)" ]; then
+      [ "$dir" != "$effective_dir" ] && printf '%s\n' "$dir"
+      return 0
+    fi
+  done
+}
+
+# Orca restores a pane after SSH reconnect by typing `claude --resume <id>`
+# into a fresh shell, which drops the CLAUDE_CONFIG_DIR the ccu/ccud subshell
+# had exported — resume then searches the wrong account and fails with
+# "No conversation found". Re-resolve the account from the transcript location.
+# Pass-through in every other case; the override env applies to this single
+# invocation only and never leaks into the caller's shell.
+claude() {
+  local session_id
+  session_id="$(_cc_resume_session_id "$@")"
+  if [ -n "$session_id" ]; then
+    local override
+    override="$(_cc_find_session_config_dir "$session_id")"
+    if [ -n "$override" ]; then
+      echo "[harness] 세션 $session_id 은(는) $override 계정 소속 — CLAUDE_CONFIG_DIR 재지정" >&2
+      CLAUDE_CONFIG_DIR="$override" command claude "$@"
+      return $?
+    fi
+  fi
+  command claude "$@"
 }
 
 # ── Orca ──
