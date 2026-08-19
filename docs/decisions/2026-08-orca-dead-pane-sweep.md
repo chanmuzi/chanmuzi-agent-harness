@@ -55,14 +55,27 @@ relay의 셸은 살아남고, 다음 접속 때 앱이 고아 PTY를 재입양�
 부활한다(2026-08-19 실측 정합 — solly tab을 UI에서 닫자 원장이 `[]`로
 갱신되는 것 확인).
 
-이에 sweep에 reap 단계를 추가했다. kill 조건은 전부 충족해야 한다:
+이에 sweep에 reap 단계를 추가했다. kill 조건은 전부 충족해야 한다
+(PR #44 리뷰에서 보강):
 
-- 원장이 정상(`tabsByWorktreePath` 존재)이고 pane의 tab id가 어느 원장
-  파일에도 없음 — 의도적으로 남긴 pane은 원장에 있으므로 절대 매칭 안 됨,
-  원장이 사라진 비정상 상태에서는 reap 전체를 거부(안전한 실패)
-- 셸에 자식 프로세스가 전혀 없음 (claude 포함 무엇이든 돌고 있으면 제외)
+- 원장이 **대표성 검증**을 통과 — `tabsByWorktreePath` 존재에 더해, 현재
+  relay pane 중 최소 1개의 tab이 원장에 실재해야 한다. namespace 파일
+  하나가 유실·손상된 경우까지 안전한 실패(reap 전체 거부, nudge 폴백만
+  동작)로 처리하기 위함. tab 조회는 `grep -F` 고정 문자열(fail-open 방지)
+- pane의 tab id가 어느 원장 파일에도 없음 — 의도적으로 남긴 pane은 원장에
+  있으므로 절대 매칭 안 됨
+- 셸 서브트리에 **셸(bash/sh 계열) 외 프로세스가 없음** — pane 셸은
+  relay → wrapper bash → interactive bash로 중첩될 수 있어(2026-08-19
+  실측) 직속 자식 유무로는 판정할 수 없다
 - 셸 나이 ≥ 600초 (`ORCA_NUDGE_REAP_MIN_AGE`로 조정) — 방금 만든 pane의
-  원장 기록 지연 레이스 방지
+  원장 기록 지연 레이스 방지. macOS는 `etimes` 미지원이라 `lstart` 파싱
+  폴백을 쓴다
+
+nudge 경로에도 같은 리뷰에서 가드가 붙었다: 원장 tab에 `aiVaultTitle`이
+있는 **agent pane만** nudge한다. plain 터미널 pane에 nudge하면 relay가
+존재한 적 없는 claude 세션 상태를 학습하기 때문. nudge 실패도 마커를
+기록해(셸 사망·새 claude 등장 시 자동 해제) 매분 재시도로 인한 로그
+무한 증식을 막는다.
 
 부활 루프의 부수 발견: 실패한 `--resume`도 새 세션 id를 발급하고
 SessionStart 훅까지 실행하므로(transcript는 안 남음), relay/앱이 그 일회용

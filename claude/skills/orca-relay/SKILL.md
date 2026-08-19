@@ -111,11 +111,15 @@ relay가 PTY의 master를 쥐고 있어 앱을 꺼도 세션이 살아남는다.
 - `orca-nudge <pid>` — 해당 pane에 `SessionStart(resume)` 이벤트를 주입해 relay
   상태 리셋 (idle 가드 내장, `--force`로 우회). 살아있는 claude PID가 기본
   대상이고, 죽은 pane은 목록의 pane 셸 PID를 넘기면 폴백 경로로 처리된다.
-- `orca-nudge --sweep` — cron 모드, 2단계 정리: **UI에서 이미 닫힌** dead
-  pane(원장 `~/.orca/sessions/*.json`에 tab 없음 + 셸에 자식 없음 + 10분
-  이상 경과)은 셸을 reap해 부활을 차단하고, UI에 아직 있는 dead pane은 한
-  번씩 nudge한다. pane별 마커로 재전송을 막고, pane에 새 claude가 뜨면
-  마커를 해제해 재발도 잡는다. 조용할 땐 출력이 없다(cron 로그 오염 방지).
+- `orca-nudge --sweep` — cron 모드, 2단계 정리. 원장(`~/.orca/sessions/*.json`)이
+  **대표성 검증**(현재 relay pane 중 최소 1개의 tab이 원장에 실재)을 통과할
+  때만 원장을 신뢰한다: UI에서 이미 닫힌 dead pane(tab 없음 + 서브트리에 셸
+  외 프로세스 없음 + 10분 이상 경과)은 셸을 reap해 부활을 차단하고, UI에
+  남은 dead pane 중 **agent pane**(tab에 `aiVaultTitle` 존재)만 한 번씩
+  nudge한다 — plain 터미널 pane은 건드리지 않는다. 원장이 비정상이면 reap
+  전체를 끄고 nudge 폴백만 동작한다. 성공·실패 모두 pane별 마커로 재전송을
+  막고, pane에 새 claude가 뜨면 마커를 해제해 재발도 잡는다. 조용할 땐
+  출력이 없다(cron 로그 오염 방지).
 - Orca의 비공개 훅 API 형식에 의존하므로 Orca 업데이트 후 4xx가 나오면 형식
   변경을 의심하라 (세션에 해는 없음).
 
