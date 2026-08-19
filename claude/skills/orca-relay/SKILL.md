@@ -58,12 +58,35 @@ relay가 PTY의 master를 쥐고 있어 앱을 꺼도 세션이 살아남는다.
   쥔 pane 셸은 살아남는다.** 다음 접속 때 앱이 고아 PTY를 재입양해 tab을
   재생성한다 — pane을 확실히 없애려면 원장 제거(UI 닫기)와 서버 셸 종료가
   둘 다 필요하다. `--sweep`의 reap 단계가 후자를 자동화한다(위 도구 절).
+- 유령 pane — **UI 닫기는 서버의 claude를 죽이지 않는다**: tab을 닫아도 pane
+  셸 안의 claude가 계속 산다. resume 명령의 재료는 relay 자식
+  `relay-ai-vault-service.js`가 transcript(`projects/*/**.jsonl`)를 스캔해
+  조립하는 `resumeCommand`이고, "tab 없는 활성 agent pane"이 남아 있는 동안
+  앱은 프로젝트를 열 때마다 새 pane에 이를 자동 타이핑한다 — 클릭마다 같은
+  세션이 fork로 하나씩 늘어나는 루프다 (2026-08-19 실측: solly 워크트리에
+  유령 pane 3개, 그중 하나는 삭제된 worktree 안에서 waiting). `--sweep`의
+  ghost reap 단계가 이 claude를 TERM해 루프를 끊는다(아래 도구 절).
+  transcript는 디스크에 남으므로 언제든 수동 resume 가능하다.
+  근거: `docs/decisions/2026-08-orca-ghost-pane-reap.md`
 - 함정 — 일회용 id 오염: transcript가 없는 id로 resume이 실패해도 Claude
   Code는 새 세션 id를 발급하고 SessionStart 훅을 실행한다(transcript는 안
   씀). relay/앱이 그 빈 id를 pane 세션으로 학습해 다음 복구도 반드시
   실패하는 루프가 된다. 세션 잔재(`session-env/<id>`, `tasks/session-<id>`)만
   있고 `projects/*/<id>.jsonl`이 없으면 이 케이스다. 진짜 대화는 해당 프로젝트
   디렉토리의 다른 jsonl에서 내용으로 식별해 수동 `--resume` 하라.
+
+### 좌측 패널에 subagent가 잔뜩 파생돼 보임
+
+- ai-vault 서비스가 `projects/<프로젝트>/<세션id>/subagents/agent-*.jsonl`
+  transcript 파일을 세션의 자식 행으로 노출하는 것 — 실행 중인 프로세스가
+  아니라 과거 기록이다. resume이 cwd를 바꿔가며 반복되면 같은 세션의
+  transcript가 여러 프로젝트 디렉토리에 복제되고 fork id까지 생겨 트리가
+  계속 불어난다 (2026-08-19 실측: 같은 세션 jsonl이 worktree·main 프로젝트
+  디렉토리 양쪽에 존재). 행에 남은 스피너는 relay가 SubagentStop을 놓친
+  stale 상태다.
+- 정리는 해당 transcript 파일/디렉토리 삭제뿐인데 대화 기록 삭제이므로
+  반드시 사용자 확인을 받아라. 근본 원인인 fork 증식은 유령 pane reap이
+  끊는다(위 절).
 
 ### 세션이 Orca에 아예 미인식됨
 
@@ -111,15 +134,20 @@ relay가 PTY의 master를 쥐고 있어 앱을 꺼도 세션이 살아남는다.
 - `orca-nudge <pid>` — 해당 pane에 `SessionStart(resume)` 이벤트를 주입해 relay
   상태 리셋 (idle 가드 내장, `--force`로 우회). 살아있는 claude PID가 기본
   대상이고, 죽은 pane은 목록의 pane 셸 PID를 넘기면 폴백 경로로 처리된다.
-- `orca-nudge --sweep` — cron 모드, 2단계 정리. 원장(`~/.orca/sessions/*.json`)이
+- `orca-nudge --sweep` — cron 모드, 3단계 정리. 원장(`~/.orca/sessions/*.json`)이
   **대표성 검증**(현재 relay pane 중 최소 1개의 tab이 원장에 실재)을 통과할
-  때만 원장을 신뢰한다: UI에서 이미 닫힌 dead pane(tab 없음 + 서브트리에 셸
-  외 프로세스 없음 + 10분 이상 경과)은 셸을 reap해 부활을 차단하고, UI에
-  남은 dead pane 중 **agent pane**(tab에 `aiVaultTitle` 존재)만 한 번씩
-  nudge한다 — plain 터미널 pane은 건드리지 않는다. 원장이 비정상이면 reap
-  전체를 끄고 nudge 폴백만 동작한다. 성공·실패 모두 pane별 마커로 재전송을
-  막고, pane에 새 claude가 뜨면 마커를 해제해 재발도 잡는다. 조용할 땐
-  출력이 없다(cron 로그 오염 방지).
+  때만 원장을 신뢰한다: ① 유령 pane(tab 없음 + **claude 생존**)은 claude가
+  idle/waiting을 자기보고하고, claude 나이 ≥ `ORCA_NUDGE_GHOST_MIN_AGE`(기본
+  900초)이며, tab 부재가 `ORCA_NUDGE_GHOST_CONFIRM`(기본 600초) 간격의 두 번의
+  sweep에서 관측됐을 때만 claude를 TERM한다(전송 직전 상태 재확인; busy는
+  절대 건드리지 않음) — claude가 죽으면 dead pane이 되어 ②로 이어진다.
+  ② UI에서 이미 닫힌 dead pane(tab 없음 + 서브트리에 셸 외 프로세스 없음 +
+  10분 이상 경과)은 셸을 reap해 부활을 차단하고, ③ UI에 남은 dead pane 중
+  **agent pane**(tab에 `aiVaultTitle` 존재)만 한 번씩 nudge한다 — plain
+  터미널 pane은 건드리지 않는다. 원장이 비정상이면 ghost/reap 전체를 끄고
+  nudge 폴백만 동작한다. 성공·실패 모두 pane별 마커로 재전송을 막고, pane에
+  새 claude가 뜨면 마커를 해제해 재발도 잡는다. 조용할 땐 출력이 없다
+  (cron 로그 오염 방지).
 - Orca의 비공개 훅 API 형식에 의존하므로 Orca 업데이트 후 4xx가 나오면 형식
   변경을 의심하라 (세션에 해는 없음).
 
