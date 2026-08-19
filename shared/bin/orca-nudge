@@ -27,9 +27,11 @@
 #   orca-nudge --force <pid>  skip the "session must be idle" guard
 #   orca-nudge --sweep      cron mode: reap dead panes the UI already closed
 #                           (tab gone from ~/.orca/sessions — kills the shell
-#                           so the pane cannot resurrect), and nudge the rest
-#                           once (marker in ~/.cache/orca-nudge, dropped when
-#                           a new claude appears in the pane)
+#                           so the pane cannot resurrect), TERM the claude of
+#                           ghost panes (closed in UI but claude still alive
+#                           and idle/waiting — see ghost_reap), and nudge the
+#                           rest once (marker in ~/.cache/orca-nudge, dropped
+#                           when a new claude appears in the pane)
 
 set -u
 
@@ -333,6 +335,16 @@ dead_panes() {
 # docs/decisions/2026-08-orca-dead-pane-sweep.md.)
 ORCA_STORE_DIR="$HOME/.orca/sessions"
 REAP_MIN_AGE_SEC="${ORCA_NUDGE_REAP_MIN_AGE:-600}"
+GHOST_MIN_AGE_SEC="${ORCA_NUDGE_GHOST_MIN_AGE:-900}"
+GHOST_CONFIRM_SEC="${ORCA_NUDGE_GHOST_CONFIRM:-600}"
+GHOST_RETERM_SEC=300
+
+# Seconds since a file was last modified; empty when unknown.
+file_age_sec() { # $1: path
+  local m
+  m="$(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null)"
+  [ -n "$m" ] && echo $(( $(date +%s) - m ))
+}
 
 tab_in_store() { # $1: tab id (fixed-string match — a regex-failed grep must not fail open)
   grep -qsF -- "$1" "$ORCA_STORE_DIR"/*.json 2>/dev/null
@@ -389,11 +401,59 @@ reapable() { # $1: shell pid
   [ -n "$et" ] && [ "$et" -ge "$REAP_MIN_AGE_SEC" ]
 }
 
+# A UI-closed pane whose claude is still ALIVE is a "ghost pane": closing a
+# tab in the UI never kills the server-side process, and the relay then keeps
+# reporting an active agent pane with no tab — which is exactly what makes the
+# app auto-type `claude --resume` into a fresh pane on the next project open,
+# forking yet another live claude per click (observed 2026-08-19; see
+# docs/decisions/2026-08-orca-ghost-pane-reap.md). Reaping means TERMing the
+# claude: the transcript is already on disk and stays resumable, and the pane
+# then becomes a plain dead pane that the existing reap path removes. Every
+# guard must hold before the TERM (the caller established store_trusted and
+# tab-absence):
+#   - claude self-reports idle or waiting — a busy session is never touched;
+#     a waiting one is unanswerable, its prompt has no UI pane anymore,
+#   - claude is old enough (GHOST_MIN_AGE_SEC) AND the tab has been absent
+#     across two sweeps GHOST_CONFIRM_SEC apart, so a freshly created pane
+#     whose store write lags behind cannot match,
+#   - the status is re-checked right before sending,
+#   - a TERM already sent gets GHOST_RETERM_SEC to let claude save state
+#     before it is repeated.
+ghost_reap() { # $1: shell pid, $2: pane key, $3: claude pid
+  local shell="$1" pane="$2" cpid="$3"
+  local age status config_dir seen killed
+  age="$(proc_age_sec "$cpid")"
+  [ -n "$age" ] && [ "$age" -ge "$GHOST_MIN_AGE_SEC" ] || return 0
+  age="$(proc_age_sec "$shell")"
+  [ -n "$age" ] && [ "$age" -ge "$REAP_MIN_AGE_SEC" ] || return 0
+  config_dir="$(env_var "$cpid" CLAUDE_CONFIG_DIR)"
+  status="$(session_status "$cpid" "$config_dir")" || status=""
+  case "$status" in idle|waiting) ;; *) return 0 ;; esac
+  seen="$SWEEP_STATE_DIR/${shell}.${cpid}.ghostseen"
+  if [ ! -e "$seen" ]; then
+    : > "$seen"
+    return 0
+  fi
+  age="$(file_age_sec "$seen")"
+  [ -n "$age" ] && [ "$age" -ge "$GHOST_CONFIRM_SEC" ] || return 0
+  killed="$SWEEP_STATE_DIR/${shell}.${cpid}.ghostkill"
+  if [ -e "$killed" ]; then
+    age="$(file_age_sec "$killed")"
+    [ -n "$age" ] && [ "$age" -ge "$GHOST_RETERM_SEC" ] || return 0
+  fi
+  status="$(session_status "$cpid" "$config_dir")" || status=""
+  case "$status" in idle|waiting) ;; *) return 0 ;; esac
+  kill -TERM "$cpid" 2>/dev/null
+  : > "$killed"
+  echo "[$(date '+%F %T')] sweep: ghost pane ${pane%%:*}… — sent TERM to claude $cpid (status: $status, tab closed in UI)"
+}
+
 # ── Sweep mode (cron) ──
 
-# Two-tier cleanup for dead panes. Panes the UI already closed are reaped
-# (shell killed — see reapable() above); panes still in the UI get their
-# spinner nudged exactly once. A per-pane marker file prevents the
+# Three-tier cleanup over all relay panes. UI-closed panes with a live idle
+# claude get that claude TERMed (see ghost_reap above); dead panes the UI
+# already closed are reaped (shell killed — see reapable() above); dead panes
+# still in the UI get their spinner nudged exactly once. A per-pane marker file prevents the
 # every-minute cron from re-sending forever (dead panes persist until their
 # shell goes away); the marker is dropped when the shell dies or a new claude
 # starts in the pane, so a session that dies "working" again is re-covered.
@@ -402,7 +462,7 @@ reapable() { # $1: shell pid
 SWEEP_STATE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/orca-nudge"
 
 sweep() {
-  local shell pane marker pid out
+  local shell pane marker pid out base cpid
   mkdir -p "$SWEEP_STATE_DIR"
   for marker in "$SWEEP_STATE_DIR"/*.swept; do
     [ -e "$marker" ] || continue
@@ -410,6 +470,15 @@ sweep() {
     if ! kill -0 "$pid" 2>/dev/null || claude_descendant "$pid" >/dev/null; then
       rm -f "$marker"
     fi
+  done
+  # Ghost markers are tied to one specific claude PID. Once that claude is
+  # gone the pane either died (the dead-pane path takes over) or restarted a
+  # fresh claude (new PID → new marker name), so the marker is garbage.
+  for marker in "$SWEEP_STATE_DIR"/*.ghostseen "$SWEEP_STATE_DIR"/*.ghostkill; do
+    [ -e "$marker" ] || continue
+    base="${marker##*/}"; base="${base%.*}"
+    cpid="${base#*.}"
+    kill -0 "$cpid" 2>/dev/null && is_claude_proc "$cpid" || rm -f "$marker"
   done
   # Trust the store once per sweep. When it is not representative (wiped,
   # moved, namespace file lost), reap is disabled entirely and every dead
@@ -419,6 +488,18 @@ sweep() {
 
   while read -r shell pane; do
     [ -n "${shell:-}" ] || continue
+    # Live claude in the pane: healthy while its tab is in the store; with the
+    # tab gone it is a ghost pane (see ghost_reap). Without a trusted store
+    # live panes are never touched at all.
+    if cpid="$(claude_descendant "$shell")"; then
+      [ "$trusted" -eq 1 ] || continue
+      if tab_in_store "${pane%%:*}"; then
+        rm -f "$SWEEP_STATE_DIR/${shell}.${cpid}.ghostseen"
+      else
+        ghost_reap "$shell" "$pane" "$cpid"
+      fi
+      continue
+    fi
     if [ "$trusted" -eq 1 ]; then
       if ! tab_in_store "${pane%%:*}"; then
         # UI-abandoned residue: kill the shell so the pane cannot resurrect.
@@ -449,7 +530,7 @@ sweep() {
       : > "$marker"
       echo "[$(date '+%F %T')] sweep: pane=$pane shell=$shell failed: $out"
     fi
-  done < <(dead_panes)
+  done < <(relay_panes)
   # Heartbeat for "did cron actually run?" without a log line per minute.
   touch "$SWEEP_STATE_DIR/.last-sweep"
 }
