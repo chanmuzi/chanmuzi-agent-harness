@@ -5,6 +5,8 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=shared/lib/os.sh
 . "$SCRIPT_DIR/shared/lib/os.sh"
+# shellcheck source=shared/lib/plugins.sh
+. "$SCRIPT_DIR/shared/lib/plugins.sh"
 
 REPO_DIR="$(resolve_path "$SCRIPT_DIR")"
 REPO_DIR="${REPO_DIR%/.}"
@@ -243,26 +245,44 @@ fi
 PLUGIN_MANIFEST="$CLAUDE_DIR/plugins/installed_plugins.json"
 PLUGIN_CACHE_DIR="$CLAUDE_DIR/plugins/cache"
 if [ -f "$PLUGIN_MANIFEST" ] && command -v jq &>/dev/null; then
-  ACTIVE_PATHS="$(jq -r \
-    '(.plugins // {}) | to_entries[] | .value[]? | .installPath // empty' \
-    "$PLUGIN_MANIFEST" 2>/dev/null || true)"
+  # Physical paths: installPath may be recorded under ~/.claude-upstage, which is a
+  # symlink to ~/.claude. See shared/lib/plugins.sh.
+  ACTIVE_PATHS="$(plugin_active_cache_paths "$PLUGIN_MANIFEST")"
 
   if [ -z "$ACTIVE_PATHS" ]; then
-    log_error "installed_plugins.json: failed to parse installed plugins"
+    log_error "installed_plugins.json: no live cache path resolved"
     ERRORS=$((ERRORS + 1))
   else
+    # Classify first, mirroring setup.sh's prune guard. When nothing matches the
+    # manifest, setup.sh skips the prune, so listing every entry as stale would
+    # point the user at a command that deletes nothing and clears no warning.
     STALE_CACHE=0
+    LIVE_CACHE=0
+    STALE_DIRS=""
     if [ -d "$PLUGIN_CACHE_DIR" ]; then
       for version_dir in "$PLUGIN_CACHE_DIR"/*/*/*; do
         [ -d "$version_dir" ] || continue
-        if ! printf '%s\n' "$ACTIVE_PATHS" | grep -qxF "$version_dir"; then
-          log_warn "stale plugin cache: ${version_dir#"$PLUGIN_CACHE_DIR"/} (run ./setup.sh)"
-          WARNINGS=$((WARNINGS + 1))
+        if plugin_cache_is_active "$version_dir" "$ACTIVE_PATHS"; then
+          LIVE_CACHE=$((LIVE_CACHE + 1))
+        else
+          STALE_DIRS="$STALE_DIRS$version_dir"$'\n'
           STALE_CACHE=$((STALE_CACHE + 1))
         fi
       done
     fi
-    [ "$STALE_CACHE" -eq 0 ] && log_ok "plugin cache: no stale versions"
+
+    if [ "$LIVE_CACHE" -eq 0 ] && [ "$STALE_CACHE" -gt 0 ]; then
+      log_error "plugin cache: no entry matches installed_plugins.json (setup.sh skips the prune too)"
+      ERRORS=$((ERRORS + 1))
+    elif [ "$STALE_CACHE" -eq 0 ]; then
+      log_ok "plugin cache: no stale versions"
+    else
+      while IFS= read -r version_dir; do
+        [ -n "$version_dir" ] || continue
+        log_warn "stale plugin cache: ${version_dir#"$PLUGIN_CACHE_DIR"/} (run ./setup.sh)"
+        WARNINGS=$((WARNINGS + 1))
+      done <<< "$STALE_DIRS"
+    fi
 
     # Freshness check, limited to plugins pinned to a raw commit SHA (no semver release).
     # For those the marketplace clone's HEAD is the correct "latest" baseline. Versioned
