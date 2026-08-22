@@ -239,6 +239,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/clawd-relay.sh\" StopFailure",
+            "async": true,
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SubagentStart": [
@@ -346,6 +356,30 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/clawd-relay.sh\" Elicitation",
+            "async": true,
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/clawd-relay.sh\" PreCompact",
+            "async": true,
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/clawd-relay.sh\" PostCompact",
             "async": true,
             "timeout": 10
           }

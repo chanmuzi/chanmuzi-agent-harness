@@ -10,6 +10,7 @@
 # Decision record: docs/decisions/2026-08-clawd-on-desk-hooks.md
 #
 # Usage: clawd-relay.sh <HookEventName>   (stdin = Claude Code hook JSON)
+#        clawd-relay.sh --mode             (prints remote|local|none; used by check.sh)
 # Always exits 0 and prints nothing when Clawd is not deployed on this machine.
 
 EVENT="${1:-}"
@@ -17,6 +18,7 @@ HOOKS_DIR="$HOME/.claude/hooks"          # Clawd runtime files live here (not CL
 REMOTE_IDENTITY="$HOOKS_DIR/clawd-remote.json"
 LOCAL_APP_HOOK="/Applications/Clawd on Desk.app/Contents/Resources/app.asar.unpacked/hooks/clawd-hook.js"
 LOCAL_PORT=23333
+LOCAL_RUNTIME="$HOME/.clawd/runtime.json"  # desktop Clawd records the port it actually bound (pretty JSON)
 
 drain_stdin() { cat >/dev/null 2>&1 || :; }
 
@@ -29,8 +31,8 @@ find_node() {
   return 1
 }
 
-json_field() {  # json_field <file> <key>  — string/number values only
-  sed -n "s/.*\"$2\":\"\{0,1\}\([^\",}]*\)\"\{0,1\}.*/\1/p" "$1" | head -n1
+json_field() {  # json_field <file> <key>  — jq, same dependency as every other hook here
+  jq -r --arg k "$2" '.[$k] // empty' "$1" 2>/dev/null
 }
 
 # ---- resolve deployment mode -------------------------------------------------
@@ -40,24 +42,32 @@ if [ -f "$REMOTE_IDENTITY" ] && [ -f "$HOOKS_DIR/clawd-hook.js" ]; then
 elif [ "$(uname -s)" = "Darwin" ] && [ -f "$LOCAL_APP_HOOK" ]; then
   MODE="local"    # desktop Clawd app installed here
 fi
+if [ "$EVENT" = "--mode" ]; then printf '%s\n' "${MODE:-none}"; exit 0; fi
 [ -n "$MODE" ] || { drain_stdin; exit 0; }
 
 # ---- PermissionRequest: relay stdin to Clawd's permission endpoint ------------
 # Mirrors Claude Code's "http" hook semantics: POST the hook JSON, echo the
 # response body (same decision schema). Any failure → empty stdout → native prompt.
+# Values read from identity/runtime files are validated before they reach the URL,
+# and only a body that actually carries a permission decision is forwarded — the
+# loopback port is shared by every user on a multi-user host (see decision record).
 if [ "$EVENT" = "PermissionRequest" ]; then
-  command -v curl >/dev/null 2>&1 || { drain_stdin; exit 0; }
+  command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || { drain_stdin; exit 0; }
   if [ "$MODE" = "remote" ]; then
     port="$(json_field "$REMOTE_IDENTITY" remotePort)"
     nonce="$(json_field "$REMOTE_IDENTITY" routingNonce)"
-    [ -n "$port" ] && [ -n "$nonce" ] || { drain_stdin; exit 0; }
+    case "$port" in ''|*[!0-9]*) drain_stdin; exit 0 ;; esac
+    printf '%s' "$nonce" | grep -Eq '^[a-f0-9]{32}$' || { drain_stdin; exit 0; }   # same rule as Clawd ingress
     url="http://127.0.0.1:${port}/permission/${nonce}"
   else
-    url="http://127.0.0.1:${LOCAL_PORT}/permission"
+    port="$([ -f "$LOCAL_RUNTIME" ] && json_field "$LOCAL_RUNTIME" port)"
+    case "$port" in ''|*[!0-9]*) port="$LOCAL_PORT" ;; esac
+    url="http://127.0.0.1:${port}/permission"
   fi
   body="$(curl -sS --fail --connect-timeout 2 --max-time "${CLAWD_PERMISSION_TIMEOUT:-110}" \
            -H 'Content-Type: application/json' --data-binary @- "$url" 2>/dev/null)" || exit 0
-  case "$body" in \{*) printf '%s\n' "$body" ;; esac
+  [ -n "$body" ] && printf '%s' "$body" | jq -e '.hookSpecificOutput.decision? // .decision? | strings' >/dev/null 2>&1 \
+    && printf '%s\n' "$body"
   exit 0
 fi
 
