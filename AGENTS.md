@@ -14,6 +14,8 @@ Both agents receive the same repository rules here.
   operational tools (`shared/bin/orca-nudge` — Orca stuck-spinner recovery; see
   `claude/skills/orca-relay/SKILL.md` for the diagnosis playbook)
 - `claude/` contains Claude Code config sources for `~/.claude/`
+- `claude/hooks/clawd-relay.sh` — Clawd on Desk relay; harness owns these hook entries and
+  Clawd's own auto-management must stay off (see `docs/decisions/2026-08-clawd-on-desk-hooks.md`)
 - `codex/` contains Codex CLI config sources for `~/.codex/`
 - `setup.sh` installs symlinks, patches Codex config, and installs agent extras
 - `check.sh` verifies symlinks, config patches, the project-doc adapter, and required dependencies
