@@ -156,13 +156,11 @@ if grep -q 'clawd-hook.js' "$REPO_DIR/claude/settings.json"; then
   log_error "claude/settings.json contains a raw clawd-hook.js entry (Clawd auto-manage re-injected it; see decision record)"
   ERRORS=$((ERRORS + 1))
 fi
-if [ -f "$CLAUDE_DIR/hooks/clawd-remote.json" ] && [ -f "$CLAUDE_DIR/hooks/clawd-hook.js" ]; then
-  log_info "Clawd remote runtime deployed ($CLAUDE_DIR/hooks/clawd-remote.json)"
-elif [ "$(uname -s)" = "Darwin" ] && [ -f "/Applications/Clawd on Desk.app/Contents/Resources/app.asar.unpacked/hooks/clawd-hook.js" ]; then
-  log_info "Clawd desktop app detected (local mode)"
-else
-  log_skip "Clawd on Desk not deployed on this machine (relay is a no-op)"
-fi
+case "$(bash "$REPO_DIR/claude/hooks/clawd-relay.sh" --mode 2>/dev/null)" in
+  remote) log_info "Clawd remote runtime deployed (relay mode: remote)" ;;
+  local)  log_info "Clawd desktop app detected (relay mode: local)" ;;
+  *)      log_skip "Clawd on Desk not deployed on this machine (relay is a no-op)" ;;
+esac
 
 for hook in "$REPO_DIR"/claude/hooks/*.sh; do
   [ -f "$hook" ] || continue
