@@ -42,7 +42,6 @@
       "Bash(gh pr merge *--admin*)"
     ]
   },
-  "model": "opus[1m]",
   "remoteControlAtStartup": false,
   "hooks": {
     "PreToolUse": [
