@@ -36,6 +36,29 @@ Both agents receive the same repository rules here.
 - This harness fully manages Codex `mcp_servers.*` state based on `codex/mcp-servers.json` and may prune undeclared entries during setup
 - Do not overwrite unrelated Codex machine state such as `projects.*` or unrelated `plugins.*`
 - Keep this repo portable: never hardcode usernames or machine-specific absolute paths when a variable such as `$HOME` or `$REPO_DIR` can be used
+- Never commit per-user/per-machine runtime preferences (model selection, `theme`, and the like)
+  into managed configs — the runtime owns those values, and a committed pin permanently fights
+  the runtime's writes (see Runtime Drift below)
+
+## Runtime Drift
+
+Live configs are symlinked back into this repo, so runtimes write machine-local state
+directly into the working tree. This is expected, recurring, and NOT work-in-progress:
+
+- `claude/settings.json` — Claude Code CLI rewrites `model` (e.g. via `/model` or `/config`)
+  and `theme`; Orca(ADE) injects and reorders its own agent-hook entries
+- `codex/hooks.json` — Orca may inject `~/.orca/agent-hooks/codex-hook.sh` entries
+
+Handling rules:
+
+- Before `git pull` / `git checkout`, clear this drift with `git stash push` (or discard it
+  if it only touches the fields above) — do not treat it as a blocker or try to merge it
+- After `git pull && ./setup.sh && ./check.sh` all pass, pre-pull drift stashes are obsolete
+  and safe to drop; the runtime regenerates its state on next use
+- Never commit runtime drift as-is; a hook-related change becomes a commit only when it is an
+  intentional harness decision, normalized per the portability rules above
+- Managed configs intentionally do NOT pin `model` or `theme` (see Repository Rules); if the
+  runtime writes them into `claude/settings.json`, that diff is always discardable drift
 
 ## Project Doc Policy
 
