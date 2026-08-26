@@ -17,6 +17,8 @@ CODEX_DIR="$HOME/.codex"
 # must match setup.sh. See docs/decisions/2026-08-codex-skills-home.md
 CODEX_SKILLS_DIR="${CODEX_HOME:-$CODEX_DIR}/skills"
 AGENTS_DIR="$HOME/.agents"
+# shellcheck source=shared/lib/shared-skills.sh
+. "$SCRIPT_DIR/shared/lib/shared-skills.sh"
 CODEX_MCP_FILE="$REPO_DIR/codex/mcp-servers.json"
 
 ERRORS=0
@@ -52,7 +54,8 @@ check_shared_skill_if_present() {
   local dst="$CODEX_SKILLS_DIR/$skill_name"
 
   if [ -d "$src" ]; then
-    check_symlink "$dst" "$src" "skill: $skill_name"
+    # $src may itself be a symlink (shared/skills.json entries); compare final targets
+    check_symlink "$dst" "$(resolve_path "$src" 2>/dev/null || echo "$src")" "skill: $skill_name"
   fi
 }
 
@@ -143,6 +146,9 @@ check_claude_config "$CLAUDE_UP_DIR" "[work]"
 
 # Work account shares the personal plugin directory (see decision record)
 check_symlink "$CLAUDE_UP_DIR/plugins" "$CLAUDE_DIR/plugins" "[work] plugins"
+
+# Shared skills declared in shared/skills.json (both accounts + ~/.agents/skills)
+check_shared_skills "$CLAUDE_DIR" "$CLAUDE_UP_DIR"
 
 # Clawd on Desk (optional) — harness owns the hook entries; Clawd runtime files are
 # deployed by the desktop app. See docs/decisions/2026-08-clawd-on-desk-hooks.md
@@ -713,6 +719,9 @@ fi
 
 # Skills check
 check_shared_skill_if_present "context7"
+while IFS='|' read -r shared_name _rest; do
+  [ -n "$shared_name" ] && check_shared_skill_if_present "$shared_name"
+done < <(shared_skill_entries)
 
 SKILLS_FILE="$REPO_DIR/codex/skills.txt"
 if [ -f "$SKILLS_FILE" ]; then

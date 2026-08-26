@@ -51,6 +51,8 @@ CODEX_DIR="$HOME/.codex"
 # See docs/decisions/2026-08-codex-skills-home.md
 CODEX_SKILLS_DIR="${CODEX_HOME:-$CODEX_DIR}/skills"
 AGENTS_DIR="$HOME/.agents"
+# shellcheck source=shared/lib/shared-skills.sh
+. "$SCRIPT_DIR/shared/lib/shared-skills.sh"
 CODEX_MCP_FILE="$REPO_DIR/codex/mcp-servers.json"
 
 link_shared_skill_if_present() {
@@ -344,6 +346,14 @@ if [ "$INSTALL_CLAUDE" = true ]; then
   # so both accounts see the same plugins without duplicating the cache.
   mkdir -p "$CLAUDE_DIR/plugins"
   link_file "$CLAUDE_DIR/plugins" "$CLAUDE_UP_DIR/plugins"
+  echo ""
+
+  # ── Shared Skills (shared/skills.json) ──
+  # Cross-agent skills: cloned once, linked into ~/.agents/skills and both
+  # Claude accounts here; the Codex section links the same source into
+  # $CODEX_SKILLS_DIR. See docs/decisions/2026-08-gpt-image-shared-skill.md
+  log_section "  Shared Skills (shared/skills.json)..."
+  install_shared_skills "$CLAUDE_DIR" "$CLAUDE_UP_DIR"
   echo ""
 
   # ── Plugins ──
@@ -1033,6 +1043,9 @@ PYEOF
 
     log_section "  Shared Skills..."
     link_shared_skill_if_present "context7"
+    while IFS='|' read -r shared_name _rest; do
+      [ -n "$shared_name" ] && link_shared_skill_if_present "$shared_name"
+    done < <(shared_skill_entries)
     echo ""
 
     if [ -f "$SKILLS_FILE" ]; then
