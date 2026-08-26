@@ -78,15 +78,16 @@ shared_skill_sync_clone() {
   return 0
 }
 
-# Install every declared shared skill: clone + ~/.agents/skills link + Claude links.
-# $@: Claude config dirs to link into.
-install_shared_skills() {
+# Stage 1 (cross-agent): clone/update every declared skill and link it into
+# ~/.agents/skills. Runs whenever Claude OR Codex setup is requested, so
+# `./setup.sh --codex` alone still produces the source the Codex link needs.
+sync_shared_skills() {
   [ -f "$SHARED_SKILLS_FILE" ] || return 0
   if ! command -v jq &>/dev/null; then
     log_warn "jq missing — cannot read shared/skills.json"
     return 0
   fi
-  local name repo ref path node_min clone_dir src dir
+  local name repo ref path node_min clone_dir src
   while IFS='|' read -r name repo ref path node_min; do
     [ -z "$name" ] && continue
     clone_dir="$(shared_skill_clone_dir "$repo")"
@@ -98,11 +99,29 @@ install_shared_skills() {
     fi
     mkdir -p "$AGENTS_DIR/skills"
     link_file "$src" "$AGENTS_DIR/skills/$name"
+    shared_skill_check_node "$name" "$node_min"
+  done < <(shared_skill_entries)
+}
+
+# Stage 2 (Claude only): link each skill already present in ~/.agents/skills
+# into the given Claude config dirs.
+# $@: Claude config dirs to link into.
+link_shared_skills_claude() {
+  [ -f "$SHARED_SKILLS_FILE" ] || return 0
+  command -v jq &>/dev/null || return 0
+  local name src dir
+  # shellcheck disable=SC2034  # _rest swallows the remaining fields
+  while IFS='|' read -r name _rest; do
+    [ -z "$name" ] && continue
+    src="$AGENTS_DIR/skills/$name"
+    if [ ! -f "$src/SKILL.md" ]; then
+      log_warn "$name: $src not installed — skipping Claude links"
+      continue
+    fi
     for dir in "$@"; do
       mkdir -p "$dir/skills"
-      link_file "$src" "$dir/skills/$name"
+      link_file "$(resolve_path "$src")" "$dir/skills/$name"
     done
-    shared_skill_check_node "$name" "$node_min"
   done < <(shared_skill_entries)
 }
 
@@ -117,6 +136,8 @@ check_shared_skills() {
     clone_dir="$(shared_skill_clone_dir "$repo")"
     src="$clone_dir/$path"
     if [ -f "$src/SKILL.md" ]; then
+      # check_symlink compares physical paths; normalize the source the same way
+      src="$(resolve_path "$src" 2>/dev/null || echo "$src")"
       log_ok "shared skill $name: clone at $clone_dir"
     else
       log_error "shared skill $name: clone missing at $clone_dir (run ./setup.sh)"

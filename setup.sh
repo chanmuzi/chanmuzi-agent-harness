@@ -320,6 +320,16 @@ echo ""
 # ══════════════════════════════════════════
 # CLAUDE CODE
 # ══════════════════════════════════════════
+# ── Shared Skills (cross-agent stage) ──
+# Clone/update shared/skills.json entries and link them into ~/.agents/skills.
+# Runs for --claude, --codex, or both, so either section can rely on the source.
+# See docs/decisions/2026-08-gpt-image-shared-skill.md
+if [ "$INSTALL_CLAUDE" = true ] || [ "$INSTALL_CODEX" = true ]; then
+  log_section "[Shared] Skills (shared/skills.json)..."
+  sync_shared_skills
+  echo ""
+fi
+
 if [ "$INSTALL_CLAUDE" = true ]; then
   log_section "[Claude] Setting up..."
 
@@ -348,12 +358,10 @@ if [ "$INSTALL_CLAUDE" = true ]; then
   link_file "$CLAUDE_DIR/plugins" "$CLAUDE_UP_DIR/plugins"
   echo ""
 
-  # ── Shared Skills (shared/skills.json) ──
-  # Cross-agent skills: cloned once, linked into ~/.agents/skills and both
-  # Claude accounts here; the Codex section links the same source into
-  # $CODEX_SKILLS_DIR. See docs/decisions/2026-08-gpt-image-shared-skill.md
+  # ── Shared Skills (shared/skills.json) → Claude accounts ──
+  # Clone + ~/.agents/skills link happen in the cross-agent stage above.
   log_section "  Shared Skills (shared/skills.json)..."
-  install_shared_skills "$CLAUDE_DIR" "$CLAUDE_UP_DIR"
+  link_shared_skills_claude "$CLAUDE_DIR" "$CLAUDE_UP_DIR"
   echo ""
 
   # ── Plugins ──
