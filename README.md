@@ -24,7 +24,8 @@ chanmuzi-agent-harness/
 │   ├── lib/os.sh
 │   ├── shell/init.sh
 │   ├── bin/         # 운영 도구 (orca-nudge — Orca stuck-spinner 복구)
-│   └── hooks/
+│   ├── hooks/
+│   └── skills.json  # 공유 외부 스킬 (gpt-image) — 클론 + 3곳 심링크
 ├── claude/          # Claude Code 설정 (심링크 → ~/.claude/)
 │   ├── CLAUDE.md
 │   ├── settings.json
