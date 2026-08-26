@@ -13,6 +13,10 @@ Both agents receive the same repository rules here.
 - `shared/` contains cross-platform helpers, shell functions, common hooks, and
   operational tools (`shared/bin/orca-nudge` — Orca stuck-spinner recovery; see
   `claude/skills/orca-relay/SKILL.md` for the diagnosis playbook)
+- `shared/skills.json` declares cross-agent external skills (currently `gpt-image`);
+  `setup.sh` clones each repo under `${XDG_DATA_HOME:-~/.local/share}` and symlinks it into
+  `~/.agents/skills`, both Claude accounts, and the Codex skills dir
+  (see `docs/decisions/2026-08-gpt-image-shared-skill.md`)
 - `claude/` contains Claude Code config sources for `~/.claude/`
 - `claude/hooks/clawd-relay.sh` — Clawd on Desk relay; harness owns these hook entries and
   Clawd's own auto-management must stay off (see `docs/decisions/2026-08-clawd-on-desk-hooks.md`)

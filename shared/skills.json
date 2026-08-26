@@ -1,0 +1,9 @@
+[
+  {
+    "name": "gpt-image",
+    "repo": "GENEXIS-AI/gpt-image-skill",
+    "ref": "main",
+    "path": "gpt-image",
+    "node_min": 22
+  }
+]
