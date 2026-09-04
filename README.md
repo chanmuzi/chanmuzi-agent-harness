@@ -104,6 +104,7 @@ Claude Code와 Codex CLI의 플러그인/스킬 생태계는 다르므로 완전
 대신 안전장치, git workflow, 검증 규칙, 프로젝트 문서 정본 관리는 양쪽에서 같은 수준으로 유지합니다.
 
 - 공통으로 강제할 수 있는 guardrail은 `shared/hooks/`에 둡니다.
+- 전역 지침 `claude/CLAUDE.md`와 `codex/AGENTS.md`는 한 쌍으로 관리합니다. 한쪽에 행동 규칙을 추가·수정·삭제하면 같은 PR에서 다른 쪽에도 반영합니다(문체는 각 파일에 맞춤). 상대 에이전트에 없는 런타임 기능에 의존하는 규칙만 예외이며, PR에 그 이유를 적습니다.
 - 한쪽에만 있는 플러그인/스킬은 의도된 차이인지 확인하고, `check.sh`나 문서에 드러나게 관리합니다.
 - 프로젝트 문서 정본은 루트 `AGENTS.md` 하나입니다. 루트 `CLAUDE.md`는 `@AGENTS.md` 한 줄 adapter로 같은 규칙을 import합니다.
 - 프로젝트 템플릿도 같은 구조입니다: `templates/AGENTS.md`(정본) + `templates/CLAUDE.md`(adapter).
