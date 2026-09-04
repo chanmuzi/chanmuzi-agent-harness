@@ -61,8 +61,9 @@ EWS 가이드의 최소 재현(Claude Code 2.1.209)에서, **하위 디렉토리
 
 - 프로젝트 규칙 변경 절차가 "AGENTS.md 하나만 편집"으로 단순해진다
 - `check.sh`의 `project docs` 검증 메시지가 동기화 확인에서 adapter 확인으로 바뀐다
-- 글로벌 문서(`claude/CLAUDE.md`, `codex/AGENTS.md`)는 이 결정의 대상이 아니다 —
-  Agent Parity Policy에 따라 의도적 차이가 허용되는 영역으로 남는다
+- 글로벌 문서(`claude/CLAUDE.md`, `codex/AGENTS.md`)는 이 결정의 대상이 아니다.
+  2026-09 Agent Parity Policy 개정으로 행동 규칙은 두 파일을 한 쌍으로 같은 PR에서 동기화하며,
+  의도적 차이는 루트 `AGENTS.md`의 예외 목록에만 둔다 (Agent Parity Policy 참조)
 - git-claw 저장소도 같은 체계로 전환한다 (별도 PR)
 
 ## 근거 자료
