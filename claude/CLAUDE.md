@@ -74,6 +74,7 @@ Completion notifications are not guaranteed to arrive — a known Claude Code li
 When one message mixes directives with questions or doubts, address every question first;
 open questions are never dropped because a directive was also present.
 Start a directive only if its outcome does not depend on any unanswered item — a question is not a go-ahead.
+If a question is a decision the user must make (approach, scope, trade-off), your own answer does not unblock it; wait for the user.
 
 ### Significant Actions
 Before performing significant actions:

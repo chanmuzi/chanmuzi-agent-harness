@@ -59,6 +59,7 @@
 ### Mixed Messages — Answer Before Acting
 - When one message mixes directives with questions or doubts, address every question first; never drop an open question because a directive was also present.
 - Start a directive only if its outcome does not depend on any unanswered item — a question is not a go-ahead.
+- If a question is a decision the user must make (approach, scope, trade-off), your own answer does not unblock it; wait for the user.
 
 ## Verification
 - When modifying harness files (`setup.sh`, `check.sh`, configs, hooks), run `./setup.sh` and `./check.sh` to confirm no errors before reporting completion.
