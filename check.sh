@@ -374,6 +374,8 @@ check_contains "$REPO_DIR/claude/CLAUDE.md" 'Use `/commit`, `/pr`, `/pr release`
 check_contains "$REPO_DIR/codex/AGENTS.md" "Verify Before Acting or Reporting" "codex global doc: verify policy"
 check_contains "$REPO_DIR/codex/AGENTS.md" "Error Handling Integrity" "codex global doc: error policy"
 check_contains "$REPO_DIR/codex/AGENTS.md" "managed git workflow skills" "codex global doc: git workflow policy"
+check_contains "$REPO_DIR/claude/CLAUDE.md" "a question is not a go-ahead" "claude global doc: mixed-messages policy"
+check_contains "$REPO_DIR/codex/AGENTS.md" "a question is not a go-ahead" "codex global doc: mixed-messages policy"
 
 # templates follow the same adapter scheme: AGENTS.md canonical, CLAUDE.md = @AGENTS.md adapter
 if [ ! -f "$REPO_DIR/templates/AGENTS.md" ]; then

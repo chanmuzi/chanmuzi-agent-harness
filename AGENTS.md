@@ -88,12 +88,16 @@ Handling rules:
 - When adding or removing a Claude-only or Codex-only capability, either add an equivalent counterpart or update `check.sh`/docs so the difference is visible
 - Shared guardrails should live in `shared/hooks/` when both agents can enforce the same rule
 - Agent-specific global docs may use different wording, but they must preserve the same minimum working rules: verify before completion, do not hide failures, get approval for risky/git-finalizing actions, and keep git workflow routed through the managed skills/hooks
+- `claude/CLAUDE.md` and `codex/AGENTS.md` are kept in sync as a pair: a behavioral rule added, changed, or removed in one must land in the other **in the same PR** (wording adapted to each file's style). Skip the mirror only when the rule depends on a runtime feature the other agent lacks, and say so in the PR
+- When a mirrored rule is important enough to guard, add a `check_contains` pair for it in `check.sh` so drift between the two docs is caught by `./check.sh`
+- Documented parity exceptions (intentional, not drift): `codex/AGENTS.md` Language And Tone and Technical Context (Claude gets these from its output style and harness settings); `claude/CLAUDE.md` Project-Level Instructions and the Git "branch up to date" check (Codex loads root `AGENTS.md` natively and its git workflow is skill-driven). Add to this list when introducing a new one-sided section
 
 ## Verification
 
-When modifying `setup.sh`, `check.sh`, hooks, project docs, or config files:
+When modifying `setup.sh`, `check.sh`, hooks, project docs, the global agent docs (`claude/CLAUDE.md`, `codex/AGENTS.md`), or config files:
 
 1. If project rules changed, edit root `AGENTS.md` only — `CLAUDE.md` stays a single `@AGENTS.md` adapter line
-2. Run `./setup.sh` or the relevant agent-specific setup command
-3. Run `./check.sh`
-4. Only report completion after the checks reflect the final state
+2. If a global behavioral rule changed in `claude/CLAUDE.md` or `codex/AGENTS.md`, mirror it in the other file (Agent Parity Policy)
+3. Run `./setup.sh` or the relevant agent-specific setup command
+4. Run `./check.sh`
+5. Only report completion after the checks reflect the final state

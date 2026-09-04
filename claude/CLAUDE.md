@@ -70,6 +70,12 @@ Completion notifications are not guaranteed to arrive — a known Claude Code li
 - Keep watch events coarse (milestones, errors, completion) — not per-line.
 - When work completes, verify the actual result (exit marker, output) before acting on or reporting it.
 
+### Mixed Messages — Answer Before Acting
+When one message mixes directives with questions or doubts, address every question first;
+open questions are never dropped because a directive was also present.
+Start a directive only if its outcome does not depend on any unanswered item — a question is not a go-ahead.
+If a question is a decision the user must make (approach, scope, trade-off), your own answer does not unblock it; wait for the user.
+
 ### Significant Actions
 Before performing significant actions:
 1. Explain what you plan to do and why

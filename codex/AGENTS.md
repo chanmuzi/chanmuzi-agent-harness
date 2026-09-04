@@ -44,6 +44,10 @@
 - When a task has multiple logical steps, continue through the natural verification step before stopping.
 - Briefly mention remaining work only when it is genuinely outside the current request or blocked.
 
+### Subagent Delegation
+- When delegating shell or multi-step work to a subagent, require it to report commands run, exit codes, and key output.
+- Specify the deliverable format so results are actionable, and prefer blocking delegation when intermediate results inform the next step.
+
 ### Async Work Tracking
 - When you start background or asynchronous work, do not passively wait on a completion notification — completion signals are not guaranteed, and you may hang until the user checks manually.
 - Prefer foreground/blocking execution whenever the result informs your next step.
@@ -51,6 +55,11 @@
 - Never end a turn with unwatched background work: state the concrete check (exit marker, output file, status command) and the poll interval before stopping.
 - Send background shell output to a log file with an exit marker (under a temp dir, never the repo working tree) rather than pipes, so output and exit status stay visible.
 - State how you will detect completion and what you will verify; verify the actual result before acting on or reporting it.
+
+### Mixed Messages — Answer Before Acting
+- When one message mixes directives with questions or doubts, address every question first; never drop an open question because a directive was also present.
+- Start a directive only if its outcome does not depend on any unanswered item — a question is not a go-ahead.
+- If a question is a decision the user must make (approach, scope, trade-off), your own answer does not unblock it; wait for the user.
 
 ## Verification
 - When modifying harness files (`setup.sh`, `check.sh`, configs, hooks), run `./setup.sh` and `./check.sh` to confirm no errors before reporting completion.
