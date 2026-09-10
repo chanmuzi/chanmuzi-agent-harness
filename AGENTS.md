@@ -30,7 +30,11 @@ Both agents receive the same repository rules here.
 - Use helper functions from `shared/lib/os.sh`
 - Use `sed_inplace()` instead of raw `sed -i`
 - Use `resolve_path()` instead of `readlink -f`
-- Use `play_sound()` for notification sounds
+- Use `play_sound()` for notification sounds; it honors the per-user mute switch
+  (`CHANMUZI_HARNESS_SILENT=1` or the marker file
+  `${XDG_CONFIG_HOME:-$HOME/.config}/chanmuzi-agent-harness/mute-sounds`), so never
+  call `afplay`/`paplay` or `printf '\a'` directly from a hook
+  (see `docs/decisions/2026-09-sound-mute-switch.md`)
 - Guard macOS-only commands with `[ "$(uname -s)" = "Darwin" ]`
 - Guard Linux-only commands with `[ "$(uname -s)" = "Linux" ]`
 - Claude config is fully symlink-managed from `claude/`
