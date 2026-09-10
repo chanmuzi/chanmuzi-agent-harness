@@ -377,6 +377,22 @@ check_contains "$REPO_DIR/codex/AGENTS.md" "managed git workflow skills" "codex 
 check_contains "$REPO_DIR/claude/CLAUDE.md" "a question is not a go-ahead" "claude global doc: mixed-messages policy"
 check_contains "$REPO_DIR/codex/AGENTS.md" "a question is not a go-ahead" "codex global doc: mixed-messages policy"
 
+# every sound hook must route through play_sound() so the per-user mute switch
+# (harness_sound_muted) silences Claude and Codex hooks alike
+check_contains "$REPO_DIR/shared/lib/os.sh" "harness_sound_muted && return 0" "shared: play_sound honors mute switch"
+for _hook in claude/hooks/stop-sound.sh claude/hooks/subagent-stop-sound.sh \
+             claude/hooks/notification-sound.sh codex/hooks/codex-turn-complete-sound.sh; do
+  check_contains "$REPO_DIR/$_hook" "play_sound " "sound hook via play_sound: $_hook"
+done
+# absence check: no hook may reach the audio layer directly (only os.sh may)
+if grep -rlE "afplay|paplay|aplay|printf '\\\\a'" \
+     "$REPO_DIR/claude/hooks" "$REPO_DIR/codex/hooks" "$REPO_DIR/shared/hooks" 2>/dev/null | grep -q .; then
+  log_error "sound: a hook bypasses play_sound (direct afplay/paplay/aplay/bell call)"
+  ERRORS=$((ERRORS + 1))
+else
+  log_ok "sound: no hook bypasses play_sound"
+fi
+
 # templates follow the same adapter scheme: AGENTS.md canonical, CLAUDE.md = @AGENTS.md adapter
 if [ ! -f "$REPO_DIR/templates/AGENTS.md" ]; then
   log_error "templates: AGENTS.md missing (canonical template)"
