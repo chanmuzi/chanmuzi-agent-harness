@@ -31,7 +31,7 @@ Both agents receive the same repository rules here.
 - Use `sed_inplace()` instead of raw `sed -i`
 - Use `resolve_path()` instead of `readlink -f`
 - Use `play_sound()` for notification sounds; it honors the per-user mute switch
-  (`CHANMUZI_HARNESS_SILENT=1` or the marker file
+  (`CHANMUZI_AGENT_HARNESS_SILENT=1` or the marker file
   `${XDG_CONFIG_HOME:-$HOME/.config}/chanmuzi-agent-harness/mute-sounds`), so never
   call `afplay`/`paplay` or `printf '\a'` directly from a hook
   (see `docs/decisions/2026-09-sound-mute-switch.md`)

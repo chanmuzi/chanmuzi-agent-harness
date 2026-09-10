@@ -44,11 +44,11 @@ sed_inplace() {
 # Per-user mute switch for every harness notification sound (Claude and
 # Codex hooks alike). Not a managed config: it lives outside the repo so it is
 # never committed, and each machine/account decides for itself.
-#   - env:  CHANMUZI_HARNESS_SILENT=1  (anything but empty/"0")
+#   - env:  CHANMUZI_AGENT_HARNESS_SILENT=1  (anything but empty/"0")
 #   - file: ${XDG_CONFIG_HOME:-$HOME/.config}/chanmuzi-agent-harness/mute-sounds
 # Usage: harness_sound_muted && return 0
 harness_sound_muted() {
-  case "${CHANMUZI_HARNESS_SILENT:-}" in
+  case "${CHANMUZI_AGENT_HARNESS_SILENT:-}" in
     ""|0) ;;
     *) return 0 ;;
   esac

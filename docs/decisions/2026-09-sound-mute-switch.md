@@ -22,7 +22,7 @@ Codex의 `notify`에서 소리를 내는 훅을 `claude/settings.json`, `codex/c
 
 - `shared/lib/os.sh`에 `harness_sound_muted()`를 추가하고 `play_sound()` 첫 줄에서 검사한다.
   다음 중 하나면 무음:
-  - 환경변수 `CHANMUZI_HARNESS_SILENT`가 비어 있지 않고 `0`이 아닐 때
+  - 환경변수 `CHANMUZI_AGENT_HARNESS_SILENT`가 비어 있지 않고 `0`이 아닐 때
   - 마커 파일 `${XDG_CONFIG_HOME:-$HOME/.config}/chanmuzi-agent-harness/mute-sounds`가 존재할 때
 - 마커 파일이 기본 방식이다. 환경변수는 셸 rc를 거치지 않는 실행 경로(Orca resume, 데스크톱 앱,
   SSH 비로그인 셸)에서 전달이 보장되지 않지만, 파일은 어느 경로에서든 같은 홈을 보기 때문이다.
@@ -43,7 +43,7 @@ touch "${XDG_CONFIG_HOME:-$HOME/.config}/chanmuzi-agent-harness/mute-sounds"
 # 켜기
 rm "${XDG_CONFIG_HOME:-$HOME/.config}/chanmuzi-agent-harness/mute-sounds"
 # 이번 명령만 무음
-CHANMUZI_HARNESS_SILENT=1 claude
+CHANMUZI_AGENT_HARNESS_SILENT=1 claude
 ```
 
 실행 중인 세션을 재시작할 필요는 없다. 훅은 매번 새 프로세스로 뜨며 그때 파일을 확인한다.
