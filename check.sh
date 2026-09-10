@@ -384,6 +384,14 @@ for _hook in claude/hooks/stop-sound.sh claude/hooks/subagent-stop-sound.sh \
              claude/hooks/notification-sound.sh codex/hooks/codex-turn-complete-sound.sh; do
   check_contains "$REPO_DIR/$_hook" "play_sound " "sound hook via play_sound: $_hook"
 done
+# absence check: no hook may reach the audio layer directly (only os.sh may)
+if grep -rlE "afplay|paplay|aplay|printf '\\\\a'" \
+     "$REPO_DIR/claude/hooks" "$REPO_DIR/codex/hooks" "$REPO_DIR/shared/hooks" 2>/dev/null | grep -q .; then
+  log_error "sound: a hook bypasses play_sound (direct afplay/paplay/aplay/bell call)"
+  ERRORS=$((ERRORS + 1))
+else
+  log_ok "sound: no hook bypasses play_sound"
+fi
 
 # templates follow the same adapter scheme: AGENTS.md canonical, CLAUDE.md = @AGENTS.md adapter
 if [ ! -f "$REPO_DIR/templates/AGENTS.md" ]; then
