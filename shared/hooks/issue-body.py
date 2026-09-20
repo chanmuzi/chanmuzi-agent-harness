@@ -136,6 +136,44 @@ def read_body(argv, cwd):
     return bodies[0]
 
 
+def unwrap(argv, cwd):
+    """Remove known shell command prefixes; never interpret their code."""
+    while argv:
+        value = argv[0][0]
+        if re.match(r'^[A-Za-z_][A-Za-z_0-9]*=', value):
+            argv = argv[1:]
+        elif value in ('if', 'elif', 'while', 'until', 'then', 'do', 'else', '!', '{'):
+            argv = argv[1:]
+        elif value in ('command', 'time'):
+            argv = argv[1:]
+            while argv and argv[0][0] in ('-p', '--'):
+                argv = argv[1:]
+        elif value == 'env':
+            argv = argv[1:]
+            while argv and argv[0][0].startswith('-'):
+                option, dynamic, _ = argv[0]
+                argv = argv[1:]
+                if option == '--':
+                    break
+                if option in ('-i', '--ignore-environment'):
+                    continue
+                if option in ('-u', '--unset', '-C', '--chdir'):
+                    if not argv:
+                        raise Unverifiable('env option has no value')
+                    argument = argv[0]
+                    argv = argv[1:]
+                elif option.startswith(('--unset=', '--chdir=')):
+                    argument = (option.split('=', 1)[1], dynamic, False)
+                else:
+                    raise Unverifiable('unsupported env option; invoke gh directly')
+                if option in ('-C', '--chdir') or option.startswith('--chdir='):
+                    path = Path(argument[0])
+                    cwd = (path if path.is_absolute() else cwd / path) if cwd is not None and not argument[1] else None
+        else:
+            break
+    return argv, cwd
+
+
 def inspect(payload, agent):
     names = {'codex': 'Codex', 'claude': 'Claude Code'}
     if agent not in names:
@@ -153,12 +191,8 @@ def inspect(payload, agent):
             segment.append(token)
     segments.append((segment, ''))
     for argv, separator in segments:
-        while argv and re.match(r'^[A-Za-z_][A-Za-z_0-9]*=', argv[0][0]):
-            argv = argv[1:]
-        if argv and argv[0][0] in ('env', 'command'):
-            argv = argv[1:]
-            while argv and re.match(r'^[A-Za-z_][A-Za-z_0-9]*=', argv[0][0]):
-                argv = argv[1:]
+        # env -C affects this invocation only, unlike the shell's cd builtin.
+        argv, invocation_cwd = unwrap(argv, cwd)
         values = [item[0] for item in argv]
         if values[:1] == ['cd']:
             if len(argv) == 2 and not argv[1][1] and cwd is not None and separator == '&&':
@@ -169,8 +203,11 @@ def inspect(payload, agent):
         if separator in ('|', '||', '&', '(', ')'):
             cwd = None
         if values[:3] != ['gh', 'issue', 'create']:
+            if values[:1] not in (['echo'], ['printf']):
+                if any(values[i:i + 3] == ['gh', 'issue', 'create'] for i in range(len(values))):
+                    raise Unverifiable('unsupported command prefix; invoke gh directly')
             continue
-        body = read_body(argv[3:], cwd)
+        body = read_body(argv[3:], invocation_cwd)
         markers = re.findall(r'(?m)^\s*(?:🤖\s*)?Generated with \[([^\]\n]+)\](?:\([^\n)]*\))?\s*$', body)
         if markers != [expected]:
             raise Unverifiable(f'issue body must contain one Generated with [{expected}] attribution line')
