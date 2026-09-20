@@ -27,7 +27,8 @@ assert() {
   printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(printf '%s' "$cmd" | jq -Rs .)" \
     | ENFORCE_GIT_CLAW=1 bash "$HOOK" >/dev/null 2>&1
   local code=$?
-  local got=allow
+  local got=error
+  [ "$code" = "0" ] && got=allow
   [ "$code" = "2" ] && got=block
   if [ "$got" = "$expected" ]; then
     PASS=$((PASS + 1))
@@ -52,7 +53,8 @@ assert allow "git-commit-${D}F example inside gh pr --body" \
 
 # --- regression guard: gh detectors (checks 4/5) must keep working ---
 assert allow "gh issue create carrying the body marker" \
-  "gh issue create ${D}${D}title \"[Bug] x\" ${D}${D}body \"detail... Generated with [Claude Code]\""
+  "gh issue create ${D}${D}title \"[Bug] x\" ${D}${D}body \"detail...
+Generated with [Claude Code]\""
 assert block "gh issue create WITHOUT the body marker" \
   "gh issue create ${D}${D}title \"[Bug] x\" ${D}${D}body \"no marker here\""
 assert block "gh pr create WITHOUT a capitalized-prefix title" \
