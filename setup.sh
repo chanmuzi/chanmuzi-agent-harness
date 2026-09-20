@@ -1159,6 +1159,10 @@ PYEOF
           skill_name="$(basename "$skill_path")"
           SKILL_DIR="$CODEX_SKILLS_DIR/$skill_name"
 
+          # Run before ref/offline fast paths as well as after fresh installs.
+          if [ "$EXT_REPO" = "chanmuzi/git-claw" ] && [ -d "$SKILL_DIR" ]; then
+            python3 "$REPO_DIR/codex/scripts/normalize-git-claw.py" "$SKILL_DIR"
+          fi
           if [ -d "$SKILL_DIR" ]; then
             INSTALLED_SHA="$(read_installed_ref "$SKILL_DIR")"
             if [ -z "$REMOTE_SHA" ]; then
@@ -1186,6 +1190,9 @@ PYEOF
             --name "$skill_name" 2>&1) && SKILL_EXIT=0 || SKILL_EXIT=$?
           if [ $SKILL_EXIT -eq 0 ]; then
             log_ok "installed $skill_name"
+            if [ "$EXT_REPO" = "chanmuzi/git-claw" ]; then
+              python3 "$REPO_DIR/codex/scripts/normalize-git-claw.py" "$SKILL_DIR"
+            fi
             [ -n "$REMOTE_SHA" ] && write_installed_ref "$SKILL_DIR" "$REMOTE_SHA"
           else
             echo "$SKILL_OUTPUT" | sed 's/^/    /'
