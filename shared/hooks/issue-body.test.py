@@ -113,6 +113,25 @@ class IssueBodyTests(unittest.TestCase):
             self.hook('git commit -m "fix: test"', agent)
             self.hook('gh pr create --title "Fix: test" --body test', agent)
 
+    def test_shell_control_and_command_wrappers(self):
+        for agent in ('codex', 'claude'):
+            valid = shlex.quote(self.body(agent))
+            for prefix, suffix in (('if ', '; then :; fi'), ('! ', ''),
+                                   ('while ', '; do break; done'),
+                                   ('env -u GH_DEBUG ', ''),
+                                   ('env --unset=GH_DEBUG ', ''),
+                                   ('env -i ', ''), ('command -p -- ', ''),
+                                   ('time -p ', '')):
+                with self.subTest(agent=agent, prefix=prefix):
+                    self.hook(prefix + 'gh issue create --body nope' + suffix, agent, 2)
+                    self.hook(prefix + 'gh issue create --body ' + valid + suffix, agent)
+            self.hook('sudo gh issue create --body nope', agent, 2)
+            self.hook('echo gh issue create --body nope', agent)
+            nested = self.directory / agent
+            nested.mkdir()
+            (nested / 'body.md').write_text(self.body(agent))
+            self.hook('env -C ' + shlex.quote(str(nested)) + ' gh issue create -F body.md', agent)
+
     def test_install_normalization_is_narrow_and_idempotent(self):
         spec = importlib.util.spec_from_file_location('normalize', ROOT / 'codex/scripts/normalize-git-claw.py')
         module = importlib.util.module_from_spec(spec)
