@@ -5,7 +5,8 @@
 # /commit, /pr, /issue skills and call git/gh directly. This hook
 # detects those shortcut patterns and nudges the agent back to the skill.
 #
-# Set ENFORCE_GIT_CLAW=0 to bypass (e.g. for emergency hot-fixes).
+# ENFORCE_GIT_CLAW is read from the hook process environment, not the pending
+# command. A command prefix does not change this pre-execution environment.
 
 set -u
 
@@ -131,13 +132,13 @@ fi
 COMMIT_PREFIX='(feat|fix|refactor|style|docs|test|perf|chore|hotfix)(\([^)]+\))?:'
 # PR title prefix the /pr skill always produces (capitalized first letter).
 PR_TITLE_PREFIX='(Feat|Fix|Refactor|Style|Perf|Docs|Test|Chore|Hotfix|Release):'
-# Body marker the /issue skill always embeds.
-ISSUE_BODY_MARKER='Generated with \[Claude Code\]'
+# Wrappers supply identity; standalone invocation retains Claude compatibility.
+AGENT="${1:-claude}"
 
 emit_block() {
   local reason="$1" suggestion="$2" \
     header="${3:-git-claw skill bypass detected.}" \
-    override="${4:-re-run with ENFORCE_GIT_CLAW=0 only after user confirmation.}"
+    override="${4:-only after explicit user approval, set ENFORCE_GIT_CLAW=0 in the hook process environment for the approved operation, then restore it. Prefixing the pending command does not affect PreToolUse; do not disable hooks permanently.}"
   printf 'BLOCKED: %s\n' "$header" >&2
   printf 'Command: %s\n' "$COMMAND" >&2
   printf 'Reason: %s\n' "$reason" >&2
@@ -281,10 +282,10 @@ fi
 
 # 5. gh issue create without the /issue skill body marker.
 if printf '%s\n' "$COMMAND_NO_GIT_MSG" | grep -Eq '(^|[;&|[:space:]])gh[[:space:]]+issue[[:space:]]+create([[:space:]]|$)'; then
-  if ! printf '%s\n' "$COMMAND_NO_GIT_MSG" | grep -Eq "$ISSUE_BODY_MARKER"; then
+  if ! printf '%s' "$INPUT" | python3 "$SCRIPT_DIR/issue-body.py" "$AGENT"; then
     emit_block \
-      'gh issue create without the /issue skill body marker ("Generated with [Claude Code]")' \
-      'invoke the /issue skill instead'
+      "gh issue create body could not be verified for $AGENT" \
+      'use the /issue skill with truthful tool attribution; pass a literal --body or an existing --body-file written in a separate tool call'
   fi
 fi
 

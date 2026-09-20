@@ -14,4 +14,4 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd -P)"
 REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
 
-exec "$REPO_DIR/shared/hooks/enforce-git-claw.sh"
+exec "$REPO_DIR/shared/hooks/enforce-git-claw.sh" claude

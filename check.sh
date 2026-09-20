@@ -468,6 +468,20 @@ check_symlink "$CODEX_DIR/hooks/guard-destructive-git.sh" \
   "$REPO_DIR/codex/hooks/guard-destructive-git.sh" "hooks/guard-destructive-git.sh"
 check_symlink "$CODEX_DIR/hooks/enforce-git-claw.sh" \
   "$REPO_DIR/codex/hooks/enforce-git-claw.sh" "hooks/enforce-git-claw.sh"
+check_contains "$REPO_DIR/codex/hooks/enforce-git-claw.sh" 'enforce-git-claw.sh" codex' "Codex git-claw agent identity"
+check_contains "$REPO_DIR/claude/hooks/enforce-git-claw.sh" 'enforce-git-claw.sh" claude' "Claude git-claw agent identity"
+
+# Installed attribution must remain correct even after an external skill update.
+for skill_name in issue code-review; do
+  if [ -f "$CODEX_SKILLS_DIR/$skill_name/SKILL.md" ]; then
+    if python3 "$REPO_DIR/codex/scripts/normalize-git-claw.py" "$CODEX_SKILLS_DIR/$skill_name" --check; then
+      log_ok "Codex git-claw templates: $skill_name"
+    else
+      log_error "Codex git-claw templates need setup: $skill_name"
+      ERRORS=$((ERRORS + 1))
+    fi
+  fi
+done
 check_symlink "$CODEX_DIR/hooks/stop-sound.sh" \
   "$REPO_DIR/codex/hooks/stop-sound.sh" "hooks/stop-sound.sh"
 
