@@ -376,6 +376,8 @@ check_contains "$REPO_DIR/codex/AGENTS.md" "Error Handling Integrity" "codex glo
 check_contains "$REPO_DIR/codex/AGENTS.md" "managed git workflow skills" "codex global doc: git workflow policy"
 check_contains "$REPO_DIR/claude/CLAUDE.md" "a question is not a go-ahead" "claude global doc: mixed-messages policy"
 check_contains "$REPO_DIR/codex/AGENTS.md" "a question is not a go-ahead" "codex global doc: mixed-messages policy"
+check_contains "$REPO_DIR/claude/CLAUDE.md" "Clean up before declaring done" "claude global doc: wrap-up cleanup policy"
+check_contains "$REPO_DIR/codex/AGENTS.md" "Clean up before declaring done" "codex global doc: wrap-up cleanup policy"
 
 # every sound hook must route through play_sound() so the per-user mute switch
 # (harness_sound_muted) silences Claude and Codex hooks alike
