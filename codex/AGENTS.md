@@ -58,8 +58,10 @@
 
 ### Wrap-Up Cleanup
 - A task is not done while background work this session started is still running; starting a watcher obliges you to tear it down.
-- Before reporting completion, inventory what this session started: background processes, poll loops, and worktrees.
+- Before reporting completion, inventory what this session started or created: background processes (dev servers, watchers), poll loops, worktrees, local and remote branches, and temporary files (scratch notes, logs, drafts).
 - Stop a self-started item without asking only when its purpose is verifiably fulfilled — the investigation returned its final result, the watched job hit its exit marker, the awaited condition resolved. Name what you stopped in one line of the report.
+- Branches and worktrees count as fulfilled only once their work is merged (confirm the PR state or `git branch --merged`). Keep any branch with unmerged commits, an open PR, or that the user still needs.
+- Temporary files count as fulfilled only when they are outside the deliverable and nothing still reads them; never delete files the user or another process created.
 - If completion is not verified, treat the item as in progress: never stop it on your own, since stopping mid-run can leave work in an unexpected half-done state.
 - For anything in progress, ambiguous, or not started by this session (other sessions, user-launched processes), list it and propose cleanup; stop it only after the user approves. Never stop another session's work on your own.
 - When the user asks to wrap up or clean up the session, run the full inventory, stop what they approve, re-check that nothing remains, and report what was stopped and what was left (with the reason).
