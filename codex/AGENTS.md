@@ -56,6 +56,15 @@
 - Send background shell output to a log file with an exit marker (under a temp dir, never the repo working tree) rather than pipes, so output and exit status stay visible.
 - State how you will detect completion and what you will verify; verify the actual result before acting on or reporting it.
 
+### Wrap-Up Cleanup
+- A task is not done while background work this session started is still running; starting a watcher obliges you to tear it down.
+- Before reporting completion, inventory what this session started: background processes, poll loops, and worktrees.
+- Stop a self-started item without asking only when its purpose is verifiably fulfilled — the investigation returned its final result, the watched job hit its exit marker, the awaited condition resolved. Name what you stopped in one line of the report.
+- If completion is not verified, treat the item as in progress: never stop it on your own, since stopping mid-run can leave work in an unexpected half-done state.
+- For anything in progress, ambiguous, or not started by this session (other sessions, user-launched processes), list it and propose cleanup; stop it only after the user approves. Never stop another session's work on your own.
+- When the user asks to wrap up or clean up the session, run the full inventory, stop what they approve, re-check that nothing remains, and report what was stopped and what was left (with the reason).
+- Clean up before declaring done: never say the work is finished while self-started background work is still running.
+
 ### Mixed Messages — Answer Before Acting
 - When one message mixes directives with questions or doubts, address every question first; never drop an open question because a directive was also present.
 - Start a directive only if its outcome does not depend on any unanswered item — a question is not a go-ahead.

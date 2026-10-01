@@ -70,6 +70,16 @@ Completion notifications are not guaranteed to arrive — a known Claude Code li
 - Keep watch events coarse (milestones, errors, completion) — not per-line.
 - When work completes, verify the actual result (exit marker, output) before acting on or reporting it.
 
+### Wrap-Up Cleanup
+Arming a watcher is half the job; tearing it down is the other half. A task is not done while background work this session started is still running.
+
+- Before reporting completion, inventory what this session started: background sub-agents (`TaskList`), `Monitor`s, background shells, cron jobs (`CronList`) and pending `ScheduleWakeup`s, and worktrees.
+- Stop a self-started item without asking only when its purpose is verifiably fulfilled — the investigation returned its final result, the watched job hit its exit marker, the awaited condition resolved. Name what you stopped in one line of the report.
+- If completion is not verified, treat the item as in progress: never stop it on your own, since stopping mid-run can leave work in an unexpected half-done state.
+- For anything in progress, ambiguous, or not started by this session (other sessions, user-launched processes), list it and propose cleanup; stop it only after the user approves. Never stop another session's work on your own.
+- When the user asks to wrap up or clean up the session, run the full inventory, stop what they approve, re-check that nothing remains, and report what was stopped and what was left (with the reason).
+- Clean up before declaring done: never say the work is finished while self-started background work is still running.
+
 ### Mixed Messages — Answer Before Acting
 When one message mixes directives with questions or doubts, address every question first;
 open questions are never dropped because a directive was also present.
