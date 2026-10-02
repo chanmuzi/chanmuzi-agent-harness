@@ -34,6 +34,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/shared/lib/os.sh"
 # shellcheck source=shared/lib/plugins.sh
 . "$SCRIPT_DIR/shared/lib/plugins.sh"
+# shellcheck source=shared/lib/npm.sh
+. "$SCRIPT_DIR/shared/lib/npm.sh"
 
 REPO_DIR="$(resolve_path "$SCRIPT_DIR")"
 REPO_DIR="${REPO_DIR%/.}"
@@ -322,6 +324,13 @@ echo ""
 # ══════════════════════════════════════════
 # ── Shared Skills (cross-agent stage) ──
 # Clone/update shared/skills.json entries and link them into ~/.agents/skills.
+# Runs before every install path: the missing-CLI hints and --install-omx all
+# rely on `npm install -g` working without root.
+# See docs/decisions/2026-10-npm-user-prefix.md
+log_section "[Node] npm global prefix..."
+ensure_npm_user_prefix
+echo ""
+
 # Runs for --claude, --codex, or both, so either section can rely on the source.
 # See docs/decisions/2026-08-gpt-image-shared-skill.md
 if [ "$INSTALL_CLAUDE" = true ] || [ "$INSTALL_CODEX" = true ]; then
@@ -1402,6 +1411,11 @@ if ! command -v omx &>/dev/null; then
   echo -e "    ${BOLD}./setup.sh --install-omx${NC}"
   echo -e "    or ${BOLD}npm install -g oh-my-codex${NC}"
   echo -e "    ${DIM}Install the CLI globally, then use it only per project with:${NC} ${BOLD}omx setup --scope project${NC}"
+  echo ""
+fi
+
+if [ "$MISSING_CLI" = true ] && [ "$(npm config get prefix 2>/dev/null)" = "$NPM_USER_PREFIX" ]; then
+  echo -e "  ${DIM}npm installs into${NC} ${BOLD}$NPM_USER_PREFIX/bin${NC}${DIM}; the harness shell init adds it to PATH — open a new terminal after installing.${NC}"
   echo ""
 fi
 

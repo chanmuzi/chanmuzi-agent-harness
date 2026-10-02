@@ -4,6 +4,16 @@
 
 export ENABLE_EXPERIMENTAL_MCP_CLI='true'
 
+# ── PATH ──
+
+# npm user prefix that setup.sh switches to when the system npm prefix is
+# root-owned (shared servers). Without this, `npm install -g` succeeds but
+# claude/codex stay off PATH. See docs/decisions/2026-10-npm-user-prefix.md
+case ":$PATH:" in
+  *":$HOME/.npm-global/bin:"*) ;;
+  *) [ -d "$HOME/.npm-global/bin" ] && export PATH="$HOME/.npm-global/bin:$PATH" ;;
+esac
+
 # ── Claude Code ──
 
 # Config directory for the work (Upstage) account. The personal account keeps
