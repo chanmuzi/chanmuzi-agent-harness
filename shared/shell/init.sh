@@ -43,6 +43,14 @@ _cc_run() {
   local mode="$2"
   shift 2
 
+  # The claude() wrapper below shadows the binary, so look it up with the
+  # function unset (in a subshell, so the caller keeps the wrapper).
+  if ! (unset -f claude; command -v claude >/dev/null 2>&1); then
+    echo "[harness] claude CLI를 찾을 수 없습니다. 설치: npm install -g @anthropic-ai/claude-code" >&2
+    echo "[harness] 권한 오류(EACCES)가 나면 harness의 ./setup.sh를 먼저 실행하세요 (npm prefix를 ~/.npm-global로 전환)" >&2
+    return 127
+  fi
+
   local launch_dir
   launch_dir="$(_cc_launch_dir)"
   if [ "$launch_dir" != "$PWD" ]; then
