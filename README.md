@@ -72,6 +72,9 @@ chmod +x setup.sh check.sh
 | Codex CLI | latest | `npm install -g @openai/codex` |
 | jq | any | `brew install jq` / `apt install jq` |
 
+> 시스템 Node(apt 등)라서 `npm install -g`가 `EACCES`로 실패하면 `./setup.sh`를 먼저 실행하세요.
+> npm global prefix를 `~/.npm-global`로 바꾸고, 셸 초기화에서 `~/.npm-global/bin`을 PATH에 추가합니다.
+
 ## 쉘 명령어
 
 ### Claude Code
