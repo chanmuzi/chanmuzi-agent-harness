@@ -20,6 +20,9 @@ Both agents receive the same repository rules here.
 - `claude/` contains Claude Code config sources for `~/.claude/`
 - `claude/hooks/clawd-relay.sh` — Clawd on Desk relay; harness owns these hook entries and
   Clawd's own auto-management must stay off (see `docs/decisions/2026-08-clawd-on-desk-hooks.md`)
+- `shared/lib/npm.sh` switches npm's global prefix to `~/.npm-global` when the system prefix
+  is root-owned, and `shared/shell/init.sh` puts its `bin` on PATH
+  (see `docs/decisions/2026-10-npm-user-prefix.md`)
 - `codex/` contains Codex CLI config sources for `~/.codex/`
 - `setup.sh` installs symlinks, patches Codex config, and installs agent extras
 - `check.sh` verifies symlinks, config patches, the project-doc adapter, and required dependencies

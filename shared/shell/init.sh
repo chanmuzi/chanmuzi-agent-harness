@@ -4,6 +4,16 @@
 
 export ENABLE_EXPERIMENTAL_MCP_CLI='true'
 
+# ── PATH ──
+
+# npm user prefix that setup.sh switches to when the system npm prefix is
+# root-owned (shared servers). Without this, `npm install -g` succeeds but
+# claude/codex stay off PATH. See docs/decisions/2026-10-npm-user-prefix.md
+case ":$PATH:" in
+  *":$HOME/.npm-global/bin:"*) ;;
+  *) [ -d "$HOME/.npm-global/bin" ] && export PATH="$HOME/.npm-global/bin:$PATH" ;;
+esac
+
 # ── Claude Code ──
 
 # Config directory for the work (Upstage) account. The personal account keeps
@@ -32,6 +42,14 @@ _cc_run() {
   local config_dir="$1"
   local mode="$2"
   shift 2
+
+  # The claude() wrapper below shadows the binary, so look it up with the
+  # function unset (in a subshell, so the caller keeps the wrapper).
+  if ! (unset -f claude; command -v claude >/dev/null 2>&1); then
+    echo "[harness] claude CLI를 찾을 수 없습니다. 설치: npm install -g @anthropic-ai/claude-code" >&2
+    echo "[harness] 권한 오류(EACCES)가 나면 harness의 ./setup.sh를 먼저 실행하세요 (npm prefix를 ~/.npm-global로 전환)" >&2
+    return 127
+  fi
 
   local launch_dir
   launch_dir="$(_cc_launch_dir)"
