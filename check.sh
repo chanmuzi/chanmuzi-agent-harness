@@ -7,6 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/shared/lib/os.sh"
 # shellcheck source=shared/lib/plugins.sh
 . "$SCRIPT_DIR/shared/lib/plugins.sh"
+# shellcheck source=shared/lib/npm.sh
+. "$SCRIPT_DIR/shared/lib/npm.sh"
 
 REPO_DIR="$(resolve_path "$SCRIPT_DIR")"
 REPO_DIR="${REPO_DIR%/.}"
@@ -983,6 +985,17 @@ for dep in jq python3 node tmux; do
     esac
   fi
 done
+
+# Root-owned prefix (system Node) makes every `npm install -g` fail with EACCES.
+# See docs/decisions/2026-10-npm-user-prefix.md
+if command -v npm &>/dev/null; then
+  if npm_global_prefix_writable; then
+    log_ok "npm global prefix writable: $(npm config get prefix)"
+  else
+    log_warn "npm global prefix not writable: $(npm config get prefix) — run ./setup.sh to switch to $NPM_USER_PREFIX"
+    WARNINGS=$((WARNINGS + 1))
+  fi
+fi
 
 
 # ══════════════════════════════════════════
