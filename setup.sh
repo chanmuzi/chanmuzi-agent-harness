@@ -4,7 +4,6 @@ set -e
 # ── Parse arguments ──
 INSTALL_CLAUDE=false
 INSTALL_CODEX=false
-INSTALL_OMX=false
 
 if [ $# -eq 0 ]; then
   INSTALL_CLAUDE=true
@@ -14,13 +13,11 @@ else
     case "$arg" in
       --claude) INSTALL_CLAUDE=true ;;
       --codex)  INSTALL_CODEX=true ;;
-      --install-omx) INSTALL_OMX=true ;;
       --help|-h)
-        echo "Usage: ./setup.sh [--claude] [--codex] [--install-omx]"
+        echo "Usage: ./setup.sh [--claude] [--codex]"
         echo "  No flags: install both"
         echo "  --claude: Claude Code only"
         echo "  --codex:  Codex CLI only"
-        echo "  --install-omx: Install/upgrade oh-my-codex CLI only (no omx setup)"
         exit 0
         ;;
       *) echo "Unknown option: $arg"; exit 1 ;;
@@ -316,7 +313,6 @@ echo -e "Repo:   ${DIM}$REPO_DIR${NC}"
 echo -e "OS:     ${DIM}$OS${NC}"
 echo -e "Claude: ${DIM}$INSTALL_CLAUDE${NC}"
 echo -e "Codex:  ${DIM}$INSTALL_CODEX${NC}"
-echo -e "OMX:    ${DIM}$INSTALL_OMX${NC}"
 echo ""
 
 # ══════════════════════════════════════════
@@ -324,8 +320,8 @@ echo ""
 # ══════════════════════════════════════════
 # ── Shared Skills (cross-agent stage) ──
 # Clone/update shared/skills.json entries and link them into ~/.agents/skills.
-# Runs before every install path: the missing-CLI hints and --install-omx all
-# rely on `npm install -g` working without root.
+# Runs before every install path: the missing-CLI hints rely on
+# `npm install -g` working without root.
 # See docs/decisions/2026-10-npm-user-prefix.md
 log_section "[Node] npm global prefix..."
 ensure_npm_user_prefix
@@ -526,7 +522,7 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
     # Prune stale plugin cache versions. Claude Code keeps every version it has ever
     # installed under plugins/cache/<marketplace>/<plugin>/<version>/ and never removes
     # the old ones. Only the installPath recorded in installed_plugins.json is live, so
-    # anything else under the cache is dead weight — and it makes OMC patching below scan
+    # anything else under the cache is dead weight
     # versions that are no longer loaded.
     PLUGIN_CACHE_DIR="$CLAUDE_DIR/plugins/cache"
     PLUGIN_MANIFEST="$CLAUDE_DIR/plugins/installed_plugins.json"
@@ -575,39 +571,6 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
   fi
   echo ""
 
-  # ── OMC Plugin Patches ──
-  OMC_CACHE="$CLAUDE_DIR/plugins/cache/omc/oh-my-claudecode"
-  OMC_MARKETPLACE="$CLAUDE_DIR/plugins/marketplaces/omc/skills"
-  if [ -d "$OMC_CACHE" ] || [ -d "$OMC_MARKETPLACE" ]; then
-    log_section "  OMC Plugin Patches..."
-
-    # deep-interview: lower ambiguity threshold 0.2 → 0.1
-    PATCHED=0
-    SEARCH_DIRS=""
-    [ -d "$OMC_CACHE" ] && SEARCH_DIRS="$OMC_CACHE"
-    [ -d "$OMC_MARKETPLACE" ] && SEARCH_DIRS="$SEARCH_DIRS $OMC_MARKETPLACE"
-    while IFS= read -r skill_file; do
-      [ -z "$skill_file" ] && continue
-      if grep -qE '"threshold":[[:space:]]*0\.2|"ambiguityThreshold":[[:space:]]*0\.2|\(default:? 0\.2\)|below 20%|≤ ?20%' "$skill_file"; then
-        sed_inplace 's/"threshold": 0\.2/"threshold": 0.1/' "$skill_file"
-        sed_inplace 's/(default 0\.2)/(default 0.1)/' "$skill_file"
-        sed_inplace 's/(default: 20%)/(default: 10%)/' "$skill_file"
-        sed_inplace 's/below 20%/below 10%/g' "$skill_file"
-        sed_inplace 's/"ambiguityThreshold": 0\.2/"ambiguityThreshold": 0.1/' "$skill_file"
-        sed_inplace 's/≤ 20%/≤ 10%/g' "$skill_file"
-        sed_inplace 's/≤20%/≤10%/g' "$skill_file"
-        log_ok "deep-interview threshold: 0.2 → 0.1"
-        PATCHED=1
-      else
-        log_skip "deep-interview threshold already patched"
-      fi
-    done < <(find $SEARCH_DIRS -path "*/deep-interview/SKILL.md" 2>/dev/null)
-
-    if [ "$PATCHED" -eq 0 ] && ! find $SEARCH_DIRS -path "*/deep-interview/SKILL.md" -print -quit 2>/dev/null | grep -q .; then
-      log_skip "deep-interview SKILL.md not found in cache"
-    fi
-    echo ""
-  fi
 fi
 
 # ══════════════════════════════════════════
@@ -1219,53 +1182,6 @@ PYEOF
 fi
 
 # ══════════════════════════════════════════
-# OH-MY-CODEX CLI
-# ══════════════════════════════════════════
-if [ "$INSTALL_OMX" = true ]; then
-  log_section "[oh-my-codex] Installing CLI..."
-
-  if ! command -v npm &>/dev/null; then
-    log_warn "npm not found. Skipping oh-my-codex install."
-    log_info "Install Node.js/npm first, then run: ./setup.sh --install-omx"
-    echo ""
-  else
-    OMX_INSTALL_OUTPUT=$(npm install -g oh-my-codex 2>&1) && OMX_INSTALL_EXIT=0 || OMX_INSTALL_EXIT=$?
-    if [ $OMX_INSTALL_EXIT -eq 0 ]; then
-      log_ok "oh-my-codex CLI installed/updated"
-    else
-      echo "$OMX_INSTALL_OUTPUT" | sed 's/^/    /'
-      log_warn "Failed to install oh-my-codex CLI"
-    fi
-
-    if command -v omx &>/dev/null; then
-      log_ok "omx: $(omx --version 2>/dev/null || echo 'found')"
-    else
-      log_warn "omx command not found after install"
-    fi
-    echo ""
-  fi
-fi
-
-# ══════════════════════════════════════════
-# GLOBAL GITIGNORE (AI tool runtime dirs)
-# ══════════════════════════════════════════
-log_section "[Git] Global gitignore..."
-
-GLOBAL_GITIGNORE="${XDG_CONFIG_HOME:-$HOME/.config}/git/ignore"
-mkdir -p "$(dirname "$GLOBAL_GITIGNORE")"
-touch "$GLOBAL_GITIGNORE"
-
-for pattern in ".omc/" ".omx/"; do
-  if grep -qxF "$pattern" "$GLOBAL_GITIGNORE"; then
-    log_skip "$pattern already in global gitignore"
-  else
-    echo "$pattern" >> "$GLOBAL_GITIGNORE"
-    log_ok "added $pattern to global gitignore"
-  fi
-done
-echo ""
-
-# ══════════════════════════════════════════
 # SHELL FUNCTIONS (.zshrc / .bashrc)
 # ══════════════════════════════════════════
 log_section "[Shell] Configuring rc file..."
@@ -1358,19 +1274,13 @@ else
 fi
 
 if ! command -v node &>/dev/null; then
-  log_warn "node not installed (required by Claude Code plugins / oh-my-codex)"
+  log_warn "node not installed (required by Claude Code plugins)"
 else
   log_ok "node: $(node --version)"
 fi
 
-if command -v omx &>/dev/null; then
-  log_ok "oh-my-codex: $(omx --version 2>/dev/null || echo 'installed')"
-else
-  log_info "oh-my-codex CLI optional: ./setup.sh --install-omx"
-fi
-
 if ! command -v tmux &>/dev/null; then
-  log_warn "tmux not installed (required by omx team mode)"
+  log_warn "tmux not installed (required by Orca relay / shell helpers)"
 else
   log_ok "tmux: $(tmux -V)"
 fi
@@ -1400,19 +1310,6 @@ if ! command -v codex &>/dev/null && [ "$INSTALL_CODEX" = true ]; then
   echo ""
   MISSING_CLI=true
 fi
-if [ "$INSTALL_OMX" = true ] && ! command -v omx &>/dev/null; then
-  echo -e "  ${RED}${BOLD}[ACTION REQUIRED]${NC} oh-my-codex CLI not installed:"
-  echo -e "    ${BOLD}npm install -g oh-my-codex${NC}"
-  echo ""
-  MISSING_CLI=true
-fi
-if ! command -v omx &>/dev/null; then
-  echo -e "  ${YELLOW}${BOLD}[RECOMMENDED]${NC} oh-my-codex CLI is not installed:"
-  echo -e "    ${BOLD}./setup.sh --install-omx${NC}"
-  echo -e "    or ${BOLD}npm install -g oh-my-codex${NC}"
-  echo -e "    ${DIM}Install the CLI globally, then use it only per project with:${NC} ${BOLD}omx setup --scope project${NC}"
-  echo ""
-fi
 
 if [ "$MISSING_CLI" = true ] && [ "$(npm config get prefix 2>/dev/null)" = "$NPM_USER_PREFIX" ]; then
   echo -e "  ${DIM}npm installs into${NC} ${BOLD}$NPM_USER_PREFIX/bin${NC}${DIM}; the harness shell init adds it to PATH — open a new terminal after installing.${NC}"
@@ -1421,13 +1318,6 @@ fi
 
 if [ "$MISSING_CLI" = false ]; then
   echo -e "  ${DIM}All tools configured. No further action needed.${NC}"
-  echo ""
-fi
-
-if command -v omx &>/dev/null; then
-  echo -e "  ${DIM}OMX policy:${NC} keep ${BOLD}~/.codex${NC} managed by this harness."
-  echo -e "  ${DIM}Use OMX only per project:${NC} ${BOLD}cd <project> && omx setup --scope project${NC}"
-  echo -e "  ${DIM}Avoid:${NC} ${BOLD}omx setup --scope user${NC}"
   echo ""
 fi
 
