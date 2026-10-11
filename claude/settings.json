@@ -1,8 +1,6 @@
 {
-  "skillListingBudgetFraction": 0.015,
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "OMC_SKIP_HOOKS": "keyword-detector",
     "CLAUDE_CODE_NO_FLICKER": "1"
   },
   "permissions": {
@@ -392,18 +390,11 @@
     "padding": 0
   },
   "enabledPlugins": {
-    "oh-my-claudecode@omc": true,
     "git-claw@git-claw": true,
     "ui-ux-pro-max@ui-ux-pro-max-skill": true,
     "codex@openai-codex": true
   },
   "extraKnownMarketplaces": {
-    "omc": {
-      "source": {
-        "source": "github",
-        "repo": "Yeachan-Heo/oh-my-claudecode"
-      }
-    },
     "git-claw": {
       "source": {
         "source": "github",
@@ -429,10 +420,5 @@
   "skipDangerousModePermissionPrompt": true,
   "teammateMode": "auto",
   "agentPushNotifEnabled": true,
-  "voiceEnabled": false,
-  "omc": {
-    "deepDive": {
-      "ambiguityThreshold": 0.1
-    }
-  }
+  "voiceEnabled": false
 }
