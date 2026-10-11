@@ -457,13 +457,6 @@ fi
 check_symlink "$CODEX_DIR/AGENTS.md"   "$REPO_DIR/codex/AGENTS.md"   "AGENTS.md"
 check_symlink "$CODEX_DIR/hooks.json"  "$REPO_DIR/codex/hooks.json"  "hooks.json"
 
-if command -v omx &>/dev/null; then
-  log_ok "oh-my-codex CLI: $(omx --version 2>/dev/null || echo 'found')"
-else
-  log_warn "oh-my-codex CLI not found (optional)"
-  WARNINGS=$((WARNINGS + 1))
-fi
-
 check_symlink "$CODEX_DIR/hooks/codex-turn-complete-sound.sh" \
   "$REPO_DIR/codex/hooks/codex-turn-complete-sound.sh" "hooks/codex-turn-complete-sound.sh"
 check_symlink "$CODEX_DIR/hooks/block-no-verify.sh" \
@@ -707,16 +700,6 @@ PYEOF
   else
     log_error "hooks.json missing enforce-git-claw.sh registration"
     ERRORS=$((ERRORS + 1))
-  fi
-
-  if grep -q 'oh-my-codex (OMX) Configuration' "$CONFIG_TOML" || \
-     grep -q 'developer_instructions = "You have oh-my-codex installed' "$CONFIG_TOML" || \
-     grep -q '^\[mcp_servers\.omx_' "$CONFIG_TOML"; then
-    log_warn "global ~/.codex/config.toml contains oh-my-codex user-scope entries"
-    log_warn "recommended: keep OMX project-scoped only (avoid 'omx setup --scope user')"
-    WARNINGS=$((WARNINGS + 1))
-  else
-    log_ok "no oh-my-codex user-scope config detected in ~/.codex/config.toml"
   fi
 
   REPO_TRUSTED=$(python3 - "$CONFIG_TOML" "$REPO_DIR" <<'PYEOF'
