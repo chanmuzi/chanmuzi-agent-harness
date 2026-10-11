@@ -53,6 +53,9 @@ AGENTS_DIR="$HOME/.agents"
 # shellcheck source=shared/lib/shared-skills.sh
 . "$SCRIPT_DIR/shared/lib/shared-skills.sh"
 CODEX_MCP_FILE="$REPO_DIR/codex/mcp-servers.json"
+# Servers the Codex desktop app writes into config.toml itself; never pruned.
+# See docs/decisions/2026-10-codex-app-managed-mcp.md
+CODEX_MCP_APP_MANAGED_FILE="$REPO_DIR/codex/mcp-app-managed.json"
 
 link_shared_skill_if_present() {
   local skill_name="$1"
@@ -157,7 +160,7 @@ migrate_remove_dev_browser_skill() {
 }
 
 sync_codex_mcp_servers() {
-  local file="$1" config_toml="$2"
+  local file="$1" config_toml="$2" app_managed_file="$3"
   [ -f "$file" ] || return 0
 
   if ! command -v jq >/dev/null 2>&1; then
@@ -173,13 +176,16 @@ sync_codex_mcp_servers() {
     return 0
   fi
 
-  PRUNE_OUTPUT=$(python3 - "$config_toml" "$file" <<'PYEOF'
+  PRUNE_OUTPUT=$(python3 - "$config_toml" "$file" "$app_managed_file" <<'PYEOF'
 import json
+import os
 import re
 import sys
 
-path, json_path = sys.argv[1], sys.argv[2]
+path, json_path, app_managed_path = sys.argv[1], sys.argv[2], sys.argv[3]
 declared = {entry["name"] for entry in json.load(open(json_path))}
+# App-managed servers (and their sub-tables such as "<name>.env") are left alone.
+app_managed = set(json.load(open(app_managed_path))) if os.path.isfile(app_managed_path) else set()
 lines = open(path).read().splitlines(True)
 out = []
 removed = []
@@ -199,7 +205,7 @@ while i < len(lines):
     while j < len(lines) and not lines[j].strip().startswith('['):
         j += 1
 
-    if name in declared:
+    if name in declared or name.split(".", 1)[0] in app_managed:
         out.extend(lines[i:j])
     else:
         removed.append(name)
@@ -404,7 +410,9 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
 
     MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces"
     DECLARED_MARKETPLACES=$(printf '%s\n' "$MARKETPLACE_NAMES" | awk '{print $1}')
-    REGISTERED_MARKETPLACE_NAMES=$(printf '%s\n' "$REGISTERED_MARKETPLACES" | sed -n 's/^[[:space:]]*❯[[:space:]]*//p')
+    # Use --json, not the text listing: the text output also prints the built-in
+    # Anthropic Directory and claude.ai-only rows, which are not removable registrations.
+    REGISTERED_MARKETPLACE_NAMES=$(claude plugin marketplace list --json 2>/dev/null | jq -r '.[].name' 2>/dev/null || true)
 
     if [ -z "$DECLARED_MARKETPLACES" ] && [ -n "$REGISTERED_MARKETPLACE_NAMES" ]; then
       log_warn "marketplace declaration parsing returned empty — skipping marketplace removal"
@@ -1177,7 +1185,7 @@ PYEOF
       log_warn "External skills declared but skill installer not found. Run 'codex' once first."
     fi
 
-    sync_codex_mcp_servers "$CODEX_MCP_FILE" "$CONFIG_TOML"
+    sync_codex_mcp_servers "$CODEX_MCP_FILE" "$CONFIG_TOML" "$CODEX_MCP_APP_MANAGED_FILE"
   fi
 fi
 

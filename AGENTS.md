@@ -45,6 +45,8 @@ Both agents receive the same repository rules here.
 - Never hardcode `~/.claude` in `claude/settings.json` — use `${CLAUDE_CONFIG_DIR:-$HOME/.claude}` so each account resolves its own directory
 - Codex config is split between symlink-managed files in `codex/` and patch-only updates to `~/.codex/config.toml`
 - This harness fully manages Codex `mcp_servers.*` state based on `codex/mcp-servers.json` and may prune undeclared entries during setup
+- Exception: servers listed in `codex/mcp-app-managed.json` are written by the Codex desktop app
+  and are never pruned or flagged (see `docs/decisions/2026-10-codex-app-managed-mcp.md`)
 - Do not overwrite unrelated Codex machine state such as `projects.*` or unrelated `plugins.*`
 - Keep this repo portable: never hardcode usernames or machine-specific absolute paths when a variable such as `$HOME` or `$REPO_DIR` can be used
 - Never commit per-user/per-machine runtime preferences (model selection, `theme`, and the like)
