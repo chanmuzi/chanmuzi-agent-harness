@@ -60,7 +60,6 @@ chmod +x setup.sh check.sh
 ```bash
 ./setup.sh --claude       # Claude Code만
 ./setup.sh --codex        # Codex CLI만
-./setup.sh --install-omx  # oh-my-codex CLI만 전역 설치
 ```
 
 ## 사전 요구사항
@@ -132,24 +131,6 @@ cd ~/chanmuzi-agent-harness && git pull && ./setup.sh
 ---
 
 <details>
-<summary><b>oh-my-codex 정책</b></summary>
-
-- 전역 `~/.codex`는 이 harness가 관리
-- `oh-my-codex`는 `--scope project`로만 사용
-- `omx setup --scope user`는 사용하지 않음
-
-```bash
-# 프로젝트별 적용
-cd /path/to/project
-omx setup --scope project
-
-# 사전 점검
-omx setup --scope project --dry-run
-```
-
-</details>
-
-<details>
 <summary><b>context7 복구</b></summary>
 
 ```bash
@@ -157,17 +138,6 @@ mkdir -p ~/.agents/skills/context7
 scp ~/.agents/skills/context7/SKILL.md <user>@<host>:~/.agents/skills/context7/SKILL.md
 ./setup.sh --codex && ./check.sh
 ```
-
-</details>
-
-<details>
-<summary><b>OMC 플러그인 패치</b></summary>
-
-| 스킬 | 패치 내용 | 이유 |
-|------|-----------|------|
-| `deep-interview` | ambiguity threshold `0.2` → `0.1` | 더 엄격한 모호성 기준 |
-
-플러그인 업데이트 후 `./setup.sh --claude`를 다시 실행하면 패치가 자동 재적용됩니다.
 
 </details>
 
