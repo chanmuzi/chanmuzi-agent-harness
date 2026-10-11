@@ -404,7 +404,9 @@ for name, val in d.get('extraKnownMarketplaces', {}).items():
 
     MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces"
     DECLARED_MARKETPLACES=$(printf '%s\n' "$MARKETPLACE_NAMES" | awk '{print $1}')
-    REGISTERED_MARKETPLACE_NAMES=$(printf '%s\n' "$REGISTERED_MARKETPLACES" | sed -n 's/^[[:space:]]*❯[[:space:]]*//p')
+    # Use --json, not the text listing: the text output also prints the built-in
+    # Anthropic Directory and claude.ai-only rows, which are not removable registrations.
+    REGISTERED_MARKETPLACE_NAMES=$(claude plugin marketplace list --json 2>/dev/null | jq -r '.[].name' 2>/dev/null || true)
 
     if [ -z "$DECLARED_MARKETPLACES" ] && [ -n "$REGISTERED_MARKETPLACE_NAMES" ]; then
       log_warn "marketplace declaration parsing returned empty — skipping marketplace removal"

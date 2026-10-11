@@ -246,7 +246,9 @@ fi
 
 if [ -f "$SETTINGS_FILE" ] && command -v jq &>/dev/null && command -v claude >/dev/null 2>&1; then
   DECLARED_MARKETPLACES="$(jq -r '(.extraKnownMarketplaces // {}) | keys[]' "$SETTINGS_FILE" 2>/dev/null || true)"
-  CONFIGURED_MARKETPLACES="$(claude plugin marketplace list 2>/dev/null | sed -n 's/^[[:space:]]*❯[[:space:]]*//p')"
+  # --json lists only real registrations; the text listing also prints the built-in
+  # Anthropic Directory and claude.ai-only rows.
+  CONFIGURED_MARKETPLACES="$(claude plugin marketplace list --json 2>/dev/null | jq -r '.[].name' 2>/dev/null || true)"
   STALE_MARKETPLACES=""
 
   while IFS= read -r mp_name; do
