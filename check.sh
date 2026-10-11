@@ -22,6 +22,7 @@ AGENTS_DIR="$HOME/.agents"
 # shellcheck source=shared/lib/shared-skills.sh
 . "$SCRIPT_DIR/shared/lib/shared-skills.sh"
 CODEX_MCP_FILE="$REPO_DIR/codex/mcp-servers.json"
+CODEX_MCP_APP_MANAGED_FILE="$REPO_DIR/codex/mcp-app-managed.json"
 
 ERRORS=0
 WARNINGS=0
@@ -912,10 +913,15 @@ for line in open(path):
 PYEOF
 )"
   DECLARED_MCP_NAMES="$(jq -r '.[].name' "$CODEX_MCP_FILE" 2>/dev/null || true)"
+  APP_MANAGED_MCP_NAMES="$(jq -r '.[]' "$CODEX_MCP_APP_MANAGED_FILE" 2>/dev/null || true)"
   STALE_MCP_NAMES=""
 
   while IFS= read -r name; do
     [ -z "$name" ] && continue
+    # App-managed servers and their sub-tables ("<name>.env") are not harness state.
+    if printf '%s\n' "$APP_MANAGED_MCP_NAMES" | grep -qxF "${name%%.*}"; then
+      continue
+    fi
     if ! printf '%s\n' "$DECLARED_MCP_NAMES" | grep -qxF "$name"; then
       STALE_MCP_NAMES="${STALE_MCP_NAMES}${name}\n"
     fi
