@@ -61,6 +61,8 @@ bypass 모드에서도 하네스의 가드는 그대로 작동한다. 이는 새
   권한 모드와 독립적으로 실행된다. `init.sh` 주석의 *"hooks provide the safety guardrails"*
   설계 의도 그대로다.
 - **`deny` 리스트** — `gh pr merge --squash` / `--admin` 차단은 bypass 모드에서도 유지된다.
+  (2026-10 갱신: `--squash` deny 는 제거됨, `--admin` 만 남는다.
+  `2026-10-drop-squash-merge-deny.md` 참고)
 
 즉 이번 변경은 **안전 정책을 바꾸는 게 아니라**, 이미 메인 세션에 적용되던 "권한 스킵 + 훅 가드"
 조합을 티메이트까지 일관되게 확장하는 것이다.
