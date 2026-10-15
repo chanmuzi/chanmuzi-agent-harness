@@ -46,7 +46,7 @@ These skills handle conventions and approval steps internally — invoke them di
 For compound requests (e.g., "commit and create PR"), invoke each corresponding skill separately and sequentially — never skip a skill by handling the operation directly.
 When starting work in a git project, check if the current branch is up to date with the remote.
 If behind, inform the user and suggest an appropriate action (pull, rebase, or proceed as-is).
-Never squash merge — preserve commit history. Only exception is when the user explicitly requests it.
+Follow each repository's merge convention and the user's instruction when merging; never choose squash merge on your own — only when the user explicitly requests it, or when `gh repo view --json mergeCommitAllowed,rebaseMergeAllowed,squashMergeAllowed` shows the repository allows nothing else, and say so before merging.
 
 ### Task Continuity
 When a task involves multiple logical steps, don't stop after one step.

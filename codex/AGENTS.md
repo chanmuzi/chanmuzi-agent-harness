@@ -38,7 +38,7 @@
 ### Git
 - Use the managed git workflow skills for commit, PR, issue, review, review-reply, and handoff work.
 - Do not bypass the git workflow with bulk staging, direct commit messages, or direct PR creation when a skill applies.
-- Preserve commit history; never squash merge unless the user explicitly requests it.
+- Follow each repository's merge convention and the user's instruction when merging; never choose squash merge on your own — only when the user explicitly requests it, or when `gh repo view --json mergeCommitAllowed,rebaseMergeAllowed,squashMergeAllowed` shows the repository allows nothing else, and say so before merging.
 
 ### Task Continuity
 - When a task has multiple logical steps, continue through the natural verification step before stopping.

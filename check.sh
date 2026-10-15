@@ -381,6 +381,8 @@ check_contains "$REPO_DIR/codex/AGENTS.md" "Error Handling Integrity" "codex glo
 check_contains "$REPO_DIR/codex/AGENTS.md" "managed git workflow skills" "codex global doc: git workflow policy"
 check_contains "$REPO_DIR/claude/CLAUDE.md" "a question is not a go-ahead" "claude global doc: mixed-messages policy"
 check_contains "$REPO_DIR/codex/AGENTS.md" "a question is not a go-ahead" "codex global doc: mixed-messages policy"
+check_contains "$REPO_DIR/claude/CLAUDE.md" "never choose squash merge on your own" "claude global doc: squash-merge policy"
+check_contains "$REPO_DIR/codex/AGENTS.md" "never choose squash merge on your own" "codex global doc: squash-merge policy"
 check_contains "$REPO_DIR/claude/CLAUDE.md" "Clean up before declaring done" "claude global doc: wrap-up cleanup policy"
 check_contains "$REPO_DIR/codex/AGENTS.md" "Clean up before declaring done" "codex global doc: wrap-up cleanup policy"
 
