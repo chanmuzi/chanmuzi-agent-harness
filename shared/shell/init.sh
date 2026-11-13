@@ -187,10 +187,10 @@ orca-nudge() {
 
 # Default: bypass all approvals and sandbox (hooks provide safety guardrails)
 codex() {
-  command codex -p harness --dangerously-bypass-approvals-and-sandbox "$@"
+  command codex --no-daemon -p harness --dangerously-bypass-approvals-and-sandbox "$@"
 }
 
 # Safe: model asks for approval + workspace-write sandbox
 codex-safe() {
-  command codex -p harness -a on-request -s workspace-write "$@"
+  command codex --no-daemon -p harness -a on-request -s workspace-write "$@"
 }
